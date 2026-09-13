@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
-import { useAuth } from './AuthProvider'
+import { useAuth } from './useAuth'
 
 interface ProtectedRouteProps {
   children: ReactNode
