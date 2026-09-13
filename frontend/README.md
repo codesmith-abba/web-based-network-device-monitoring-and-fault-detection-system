@@ -70,6 +70,61 @@ The mock adapter supports `VITE_DEVICES_SCENARIO=populated|empty|partial|error|l
 
 When the Django/DRF device-management contract is available, replace the service implementation behind the existing typed interface. The page and forms should not need to know the eventual API transport or backend response shape.
 
+## Phase 5 — Device Details and Monitoring
+
+Phase 5 adds the individual-device monitoring experience at `/devices/:deviceId`.
+
+Implemented:
+
+- Device identity, IP address, type, current status, and monitoring status
+- Latest availability/reachability result
+- Latest latency and packet-loss measurements
+- Latest monitoring timestamp
+- Typed monitoring records and monitoring-service boundary
+- Historical latency visualization only when historical measurements exist
+- Clear separation between current status and historical measurements
+- SNMP metric section with explicit unavailable states when the monitoring source does not provide SNMP data
+- Monitoring configuration visibility, including monitoring state, interval, SNMP state/version, and reported metric capabilities
+- Loading, unavailable-device, API-error, missing-metric, empty-history, and no-data states
+- Development-only mock monitoring scenarios: `populated`, `empty`, `partial`, `error`, and `loading`
+- Explicit mock-data banner so fixture measurements cannot be mistaken for live network measurements
+
+### Monitoring data boundary
+
+`src/monitoring/types.ts` defines the frontend monitoring contract:
+
+```text
+DeviceMonitoringService
+└── getSnapshot(deviceId)
+    ├── latest MonitoringRecord
+    ├── history MonitoringRecord[]
+    ├── snmpMetrics SnmpMetric[]
+    └── configuration MonitoringConfiguration
+```
+
+`src/monitoring/service.ts` is deliberately unconfigured unless `VITE_MONITORING_ADAPTER=mock` is enabled. It does not assume Django/DRF monitoring URLs, HTTP methods, polling APIs, SNMP response shapes, or live measurements.
+
+The mock monitoring adapter contains clearly labelled fixture records for UI testing only. Production monitoring values must come from the eventual backend monitoring service.
+
+Example local testing:
+
+```bash
+VITE_AUTH_ADAPTER=mock \
+VITE_DEVICES_ADAPTER=mock \
+VITE_MONITORING_ADAPTER=mock \
+npm run dev
+```
+
+Monitoring state testing:
+
+```bash
+VITE_MONITORING_SCENARIO=populated
+VITE_MONITORING_SCENARIO=empty
+VITE_MONITORING_SCENARIO=partial
+VITE_MONITORING_SCENARIO=error
+VITE_MONITORING_SCENARIO=loading
+```
+
 ## Architecture
 
 ```text
@@ -78,6 +133,7 @@ src/
 ├── components/       # Shared UI primitives, states, badges, and icons
 ├── dashboard/        # Dashboard data contracts and service boundary
 ├── devices/          # Device contracts and service boundary
+├── monitoring/       # Device monitoring contracts and service boundary
 ├── layouts/          # Application-level layouts and shell
 ├── pages/            # Page-level views
 └── types/            # Shared TypeScript contracts
@@ -117,6 +173,14 @@ Device-management state testing:
 VITE_DEVICES_ADAPTER=mock VITE_DEVICES_SCENARIO=populated npm run dev
 ```
 
+Device-details testing:
+
+```bash
+VITE_AUTH_ADAPTER=mock VITE_DEVICES_ADAPTER=mock VITE_MONITORING_ADAPTER=mock npm run dev
+```
+
+Then open `/devices/rtr-01` or another device ID present in the development device adapter.
+
 ## Validation
 
 Run:
@@ -126,19 +190,18 @@ npm run lint
 npm run build
 ```
 
-Phase 4 acceptance checks:
+Phase 5 acceptance checks:
 
-1. Open `/devices` while authenticated and verify the device list is rendered in mock mode.
-2. Open `/devices` without the mock adapter and verify a clear not-configured error is shown rather than a guessed API request.
-3. Submit the registration form empty and verify required-field validation.
-4. Enter invalid IPv4 values and verify validation errors.
-5. Register a valid device in mock mode and verify it appears in the list.
-6. Edit a device and verify the updated values appear.
-7. Toggle monitoring and verify the monitoring state changes.
-8. Search by name, IP, and device type.
-9. Filter by status and monitoring state; sort by name, status, and type.
-10. Test pagination when more records are available.
-11. Test `empty`, `partial`, `error`, and `loading` scenarios.
-12. Verify deletion is not exposed until the backend contract explicitly supports it.
-13. Resize across desktop, tablet, and mobile widths and verify forms/table remain usable.
-14. Verify status and monitoring states remain understandable without relying on color alone.
+1. Authenticate with the development auth adapter and open a device details URL such as `/devices/rtr-01`.
+2. Verify device identity, IP address, type, current status, and monitoring state.
+3. Verify availability/reachability, latency, packet loss, latest result, and timestamp render from the typed monitoring contract.
+4. Verify current status and historical measurements are presented as separate concepts.
+5. Verify historical latency visualization appears only when historical data exists.
+6. Verify SNMP metrics remain explicitly unavailable when the monitoring source does not provide them.
+7. Verify monitoring configuration visibility.
+8. Test `empty`, `partial`, `error`, and `loading` monitoring scenarios.
+9. Verify an unknown device produces a clear unavailable-device error.
+10. Verify the default, non-mock monitoring adapter reports not-configured instead of making a guessed API request.
+11. Verify fixture measurements are visibly labelled as development data and are never presented as live network measurements.
+12. Resize across desktop, tablet, and mobile widths and verify the details experience remains usable.
+13. Run `npm run lint` and `npm run build` before merging.
