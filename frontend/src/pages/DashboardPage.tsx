@@ -35,7 +35,6 @@ export function DashboardPage() {
 
   useEffect(() => {
     let active = true
-    setIsLoading(true)
     getDashboardData()
       .then((result) => { if (active) setData(result) })
       .catch((reason: unknown) => {

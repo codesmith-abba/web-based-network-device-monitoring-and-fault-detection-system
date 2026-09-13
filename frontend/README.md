@@ -4,107 +4,84 @@ React + TypeScript frontend for the Web-Based Network Device Monitoring and Faul
 
 ## Phase 1 — Foundation
 
-Phase 1 replaces the Vite starter screen with the application's responsive administrator shell and establishes the visual foundation for the monitoring system.
-
-Implemented:
-
-- Responsive sidebar navigation
-- Responsive mobile navigation drawer
-- Application header
-- Dashboard landing page foundation
-- Network-monitoring visual language and reusable icon primitives
-- Tailwind CSS v4 with Vite integration
-- Accessible focus states and semantic navigation
-- Typed navigation model
-- No fake monitoring metrics, device counts, or fault events
-- Frontend structure prepared for later Django REST API integration
-
-Navigation items for features that are not yet implemented are intentionally disabled rather than presenting fake functionality.
+Responsive administrator shell, mobile navigation, application header, dashboard foundation, Tailwind CSS v4, accessible navigation, typed navigation, and a structure prepared for Django REST integration. Unimplemented features remain disabled rather than presenting fake functionality.
 
 ## Phase 2 — Authentication
 
-Phase 2 adds the administrator authentication experience without inventing a Django/DRF endpoint or response contract.
+Administrator login at `/login`, validation, accessible errors, loading states, protected routes, session persistence/expiration, logout, and a typed `AuthService` boundary. The development-only mock adapter is enabled with `VITE_AUTH_ADAPTER=mock`; no backend authentication endpoint was invented.
 
-Implemented:
-
-- Administrator login at `/login`
-- Username-or-email identifier and password fields
-- Client-side required-field validation
-- Accessible field error associations and submission alerts
-- Loading and disabled submission states
-- Authentication state provider with session persistence
-- Protected application routes
-- Redirect back to the requested path after sign in
-- Logout from the application shell
-- Local session expiration handling
-- A typed `AuthService` boundary for future Django/DRF integration
-- Development-only mock adapter for frontend flow testing
-
-### Authentication boundary
-
-`src/auth/types.ts` defines the frontend contract:
+Authentication boundary:
 
 ```text
 AuthCredentials → AuthService.login() → AuthSession
 ```
 
-`src/auth/service.ts` currently exposes two explicit modes:
-
-- `VITE_AUTH_ADAPTER=mock` — development-only adapter for exercising the UI. Any non-empty identifier/password is accepted; this is not a production authentication mechanism.
-- Default — unconfigured adapter that fails clearly instead of guessing an API URL, endpoint, request body, token format, or response shape.
-
-When Django/DRF authentication is implemented, add a production `AuthService` adapter behind the existing interface. The backend contract should define the actual endpoint, credential payload, session/token mechanism, user representation, and authentication error mapping before that adapter is added.
-
-No backend authentication was added in Phase 2. The current Django project exposes only the admin URL, so the frontend deliberately does not call an invented authentication endpoint.
-
 ## Phase 3 — Network Monitoring Dashboard
 
-Phase 3 implements the complete dashboard experience required for centralized network visibility while keeping monitoring data separate from presentation.
+Implemented the centralized network overview with Total Devices, Online, Offline, and Active Faults summary cards; device health; active faults; monitoring snapshot; reusable dashboard states/badges; responsive layouts; and typed monitoring contracts.
+
+The dashboard service does not invent a Django/DRF endpoint. Without `VITE_DASHBOARD_ADAPTER=mock`, it reports that monitoring is not configured. Mock scenarios are `populated`, `empty`, `partial`, `error`, and `loading`.
+
+## Phase 4 — Network Device Management
+
+Phase 4 implements the administrator device-management workflow required to register and manage network devices.
 
 Implemented:
 
-- Summary cards for total devices, online devices, offline devices, and active faults
-- Device health/status overview with explicit text and symbols, not color alone
-- Active fault summary with severity labels
-- Monitoring snapshot visualization for returned historical availability data
-- Reusable `StatCard`, `StatusBadge`, `FaultSeverityBadge`, `EmptyState`, `LoadingState`, and `ErrorState` components
-- Responsive desktop, tablet, and mobile dashboard layouts
-- Typed dashboard contracts for summary, device health, faults, and historical monitoring data
-- Explicit loading, populated, empty, error, and partial-data states
+- `/devices` protected application route
+- Device list/table with name, IP address, type, status, and monitoring state
+- Device registration form
+- Device editing form
+- Required-field validation
+- IPv4 validation
+- Device-type validation
+- Monitoring-configuration validation
+- Monitoring enable/disable control
+- Search by device name, IP address, or type
+- Status filtering
+- Monitoring-state filtering
+- Name, status, and type sorting
+- Pagination for the device list
+- Loading, empty, filtered-empty, and error states
+- Responsive registration/edit dialog and responsive device table
+- Accessible labels, validation messages, dialog semantics, and action labels
+- Device status labels using text/symbols rather than color alone
+- Explicitly no deletion action because the current backend contract does not define a device-delete endpoint
 
-### Dashboard data boundary
+### Device data boundary
 
-`src/dashboard/types.ts` defines the frontend monitoring contract:
+`src/devices/types.ts` defines the frontend contract:
 
 ```text
-DashboardService → DashboardData → Dashboard UI
+DeviceService
+├── list()
+├── create(DeviceRegistrationInput)
+├── update(id, DeviceRegistrationInput)
+└── setMonitoring(id, MonitoringState)
 ```
 
-`src/dashboard/service.ts` intentionally has no invented Django/DRF endpoint. Until the backend contract exists, the default adapter reports the dashboard as not configured rather than fabricating live monitoring results.
-
-For frontend-only state testing, the temporary development adapter can be enabled with:
+`src/devices/service.ts` contains the adapter boundary. The default service is deliberately unconfigured and does not guess Django/DRF URLs, HTTP methods, payloads, or response shapes. The temporary development adapter is enabled with:
 
 ```bash
-VITE_DASHBOARD_ADAPTER=mock VITE_DASHBOARD_SCENARIO=populated npm run dev
+VITE_DEVICES_ADAPTER=mock npm run dev
 ```
 
-Supported scenarios are `populated`, `empty`, `partial`, `error`, and `loading`. The mock data is explicitly development-only and must not be treated as live monitoring data.
+The mock adapter supports `VITE_DEVICES_SCENARIO=populated|empty|partial|error|loading` for UI-state testing. Mock device records are development data only and are not live monitoring results.
 
-When the backend monitoring API is available, replace the service implementation behind the existing typed contract. The dashboard UI should not need to know the API transport, authentication details, or backend response shape.
+When the Django/DRF device-management contract is available, replace the service implementation behind the existing typed interface. The page and forms should not need to know the eventual API transport or backend response shape.
 
 ## Architecture
 
 ```text
 src/
 ├── auth/             # Authentication contracts, service boundary, state, route guard
-├── components/       # Shared UI primitives, dashboard states, badges, and icons
+├── components/       # Shared UI primitives, states, badges, and icons
 ├── dashboard/        # Dashboard data contracts and service boundary
+├── devices/          # Device contracts and service boundary
 ├── layouts/          # Application-level layouts and shell
 ├── pages/            # Page-level views
 └── types/            # Shared TypeScript contracts
 ```
-
-Feature-specific data integrations remain separated from page and shell components. This keeps the dashboard ready for real device status, monitoring metrics, active faults, and historical analytics without inventing backend behavior prematurely.
 
 ## Technology
 
@@ -122,19 +99,23 @@ npm install
 npm run dev
 ```
 
-For frontend-only authentication flow testing, start Vite with the development adapter enabled:
+Authentication testing:
 
 ```bash
 VITE_AUTH_ADAPTER=mock npm run dev
 ```
 
-For dashboard state testing:
+Dashboard state testing:
 
 ```bash
 VITE_DASHBOARD_ADAPTER=mock VITE_DASHBOARD_SCENARIO=populated npm run dev
 ```
 
-This mock mode must not be used as production authentication or monitoring data.
+Device-management state testing:
+
+```bash
+VITE_DEVICES_ADAPTER=mock VITE_DEVICES_SCENARIO=populated npm run dev
+```
 
 ## Validation
 
@@ -145,13 +126,19 @@ npm run lint
 npm run build
 ```
 
-Phase 3 dashboard acceptance checks:
+Phase 4 acceptance checks:
 
-1. Run without `VITE_DASHBOARD_ADAPTER=mock` → a clear not-configured dashboard error is shown; no fake live metrics appear.
-2. Run with `VITE_DASHBOARD_ADAPTER=mock VITE_DASHBOARD_SCENARIO=populated` → summary cards, device health, active faults, and monitoring snapshot appear.
-3. Use `VITE_DASHBOARD_SCENARIO=empty` → zero summary values and appropriate empty states appear.
-4. Use `VITE_DASHBOARD_SCENARIO=partial` → returned data is shown with a partial-data warning.
-5. Use `VITE_DASHBOARD_SCENARIO=error` → the dashboard error state is shown.
-6. Use `VITE_DASHBOARD_SCENARIO=loading` → the loading state remains visible.
-7. Resize across desktop, tablet, and mobile widths → dashboard sections remain readable and usable.
-8. Device and fault states remain understandable from text/symbol labels even without color perception.
+1. Open `/devices` while authenticated and verify the device list is rendered in mock mode.
+2. Open `/devices` without the mock adapter and verify a clear not-configured error is shown rather than a guessed API request.
+3. Submit the registration form empty and verify required-field validation.
+4. Enter invalid IPv4 values and verify validation errors.
+5. Register a valid device in mock mode and verify it appears in the list.
+6. Edit a device and verify the updated values appear.
+7. Toggle monitoring and verify the monitoring state changes.
+8. Search by name, IP, and device type.
+9. Filter by status and monitoring state; sort by name, status, and type.
+10. Test pagination when more records are available.
+11. Test `empty`, `partial`, `error`, and `loading` scenarios.
+12. Verify deletion is not exposed until the backend contract explicitly supports it.
+13. Resize across desktop, tablet, and mobile widths and verify forms/table remain usable.
+14. Verify status and monitoring states remain understandable without relying on color alone.
