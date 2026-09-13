@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
+import { useAuth } from '../auth/AuthProvider'
 import {
   ActivityIcon,
   AlertTriangleIcon,
@@ -39,6 +40,15 @@ const icons = {
 
 export function AppShell({ children }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { session, logout } = useAuth()
+
+  const handleLogout = async () => {
+    await logout()
+    window.location.replace('/login')
+  }
+
+  const username = session?.user.username ?? 'Administrator'
+  const initials = username.slice(0, 2).toUpperCase()
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
@@ -86,10 +96,13 @@ export function AppShell({ children }: AppShellProps) {
         <div className="border-t border-slate-200 p-4">
           <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-3">
             <div className="grid size-9 place-items-center rounded-lg bg-white text-slate-700 ring-1 ring-slate-200"><ShieldIcon className="size-4" /></div>
-            <div className="min-w-0">
-              <p className="truncate text-xs font-semibold text-slate-800">Administrator</p>
-              <p className="truncate text-[11px] text-slate-500">Monitoring workspace</p>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-slate-800">{username}</p>
+              <p className="truncate text-[11px] text-slate-500">Administrator</p>
             </div>
+            <button type="button" onClick={handleLogout} className="rounded-lg px-2 py-1.5 text-[11px] font-medium text-slate-500 hover:bg-white hover:text-slate-900" aria-label="Sign out">
+              Sign out
+            </button>
           </div>
         </div>
       </aside>
@@ -108,7 +121,7 @@ export function AppShell({ children }: AppShellProps) {
               <span className="size-1.5 rounded-full bg-emerald-500" /> System ready
             </div>
             <button className="relative rounded-xl p-2.5 text-slate-500 hover:bg-slate-100" aria-label="Notifications"><BellIcon className="size-5" /></button>
-            <div className="ml-1 grid size-9 place-items-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700" aria-label="Administrator profile">AD</div>
+            <div className="ml-1 grid size-9 place-items-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700" aria-label={`${username} profile`}>{initials}</div>
           </div>
         </header>
         <main className="min-h-[calc(100vh-5rem)]">{children}</main>
