@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { ActivityIcon } from '../components/icons'
 import { useAuth } from '../auth/AuthProvider'
@@ -10,13 +10,17 @@ function getNextPath() {
 }
 
 export function LoginPage() {
-  const { login } = useAuth()
+  const { login, isAuthenticated, isLoading } = useAuth()
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [identifierError, setIdentifierError] = useState('')
   const [passwordError, setPasswordError] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) window.location.replace(getNextPath())
+  }, [isAuthenticated, isLoading])
 
   const validate = () => {
     const nextIdentifierError = identifier.trim() ? '' : 'Username or email is required.'
@@ -44,6 +48,14 @@ export function LoginPage() {
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  if (isLoading || isAuthenticated) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-slate-50" aria-live="polite">
+        <div className="size-8 animate-spin rounded-full border-2 border-slate-300 border-t-slate-950" aria-hidden="true" />
+      </main>
+    )
   }
 
   return (
