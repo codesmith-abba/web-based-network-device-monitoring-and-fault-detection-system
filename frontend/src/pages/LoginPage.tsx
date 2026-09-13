@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { FormEvent } from 'react'
 import { ActivityIcon } from '../components/icons'
 import { useAuth } from '../auth/AuthProvider'
 import { AuthError } from '../auth/types'
@@ -25,7 +26,7 @@ export function LoginPage() {
     return !nextIdentifierError && !nextPasswordError
   }
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setSubmitError('')
     if (!validate()) return
