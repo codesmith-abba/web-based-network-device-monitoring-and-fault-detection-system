@@ -57,18 +57,54 @@ When Django/DRF authentication is implemented, add a production `AuthService` ad
 
 No backend authentication was added in Phase 2. The current Django project exposes only the admin URL, so the frontend deliberately does not call an invented authentication endpoint.
 
+## Phase 3 — Network Monitoring Dashboard
+
+Phase 3 implements the complete dashboard experience required for centralized network visibility while keeping monitoring data separate from presentation.
+
+Implemented:
+
+- Summary cards for total devices, online devices, offline devices, and active faults
+- Device health/status overview with explicit text and symbols, not color alone
+- Active fault summary with severity labels
+- Monitoring snapshot visualization for returned historical availability data
+- Reusable `StatCard`, `StatusBadge`, `FaultSeverityBadge`, `EmptyState`, `LoadingState`, and `ErrorState` components
+- Responsive desktop, tablet, and mobile dashboard layouts
+- Typed dashboard contracts for summary, device health, faults, and historical monitoring data
+- Explicit loading, populated, empty, error, and partial-data states
+
+### Dashboard data boundary
+
+`src/dashboard/types.ts` defines the frontend monitoring contract:
+
+```text
+DashboardService → DashboardData → Dashboard UI
+```
+
+`src/dashboard/service.ts` intentionally has no invented Django/DRF endpoint. Until the backend contract exists, the default adapter reports the dashboard as not configured rather than fabricating live monitoring results.
+
+For frontend-only state testing, the temporary development adapter can be enabled with:
+
+```bash
+VITE_DASHBOARD_ADAPTER=mock VITE_DASHBOARD_SCENARIO=populated npm run dev
+```
+
+Supported scenarios are `populated`, `empty`, `partial`, `error`, and `loading`. The mock data is explicitly development-only and must not be treated as live monitoring data.
+
+When the backend monitoring API is available, replace the service implementation behind the existing typed contract. The dashboard UI should not need to know the API transport, authentication details, or backend response shape.
+
 ## Architecture
 
 ```text
 src/
 ├── auth/             # Authentication contracts, service boundary, state, route guard
-├── components/       # Shared UI primitives and icons
+├── components/       # Shared UI primitives, dashboard states, badges, and icons
+├── dashboard/        # Dashboard data contracts and service boundary
 ├── layouts/          # Application-level layouts and shell
 ├── pages/            # Page-level views
 └── types/            # Shared TypeScript contracts
 ```
 
-Feature-specific API integrations remain separated from page and shell components. The authentication interface can therefore be connected to Django/DRF later without redesigning the login UI or protected-route flow.
+Feature-specific data integrations remain separated from page and shell components. This keeps the dashboard ready for real device status, monitoring metrics, active faults, and historical analytics without inventing backend behavior prematurely.
 
 ## Technology
 
@@ -92,7 +128,13 @@ For frontend-only authentication flow testing, start Vite with the development a
 VITE_AUTH_ADAPTER=mock npm run dev
 ```
 
-This mock mode must not be used as production authentication.
+For dashboard state testing:
+
+```bash
+VITE_DASHBOARD_ADAPTER=mock VITE_DASHBOARD_SCENARIO=populated npm run dev
+```
+
+This mock mode must not be used as production authentication or monitoring data.
 
 ## Validation
 
@@ -103,17 +145,13 @@ npm run lint
 npm run build
 ```
 
-Manual authentication acceptance checks:
+Phase 3 dashboard acceptance checks:
 
-1. Open `/` while signed out → redirected to `/login`.
-2. Submit empty fields → required-field errors are shown and no login request is attempted.
-3. Submit non-empty credentials in mock mode → loading state appears, then the dashboard opens.
-4. Reload while authenticated → the session is restored.
-5. Open `/login` while authenticated → redirected to the dashboard.
-6. Click **Sign out** → session is cleared and `/login` opens.
-7. Let the mock session expire or remove the stored session → protected navigation requires sign in again.
-8. Run without the mock adapter → login displays a clear authentication-not-configured error rather than calling a guessed backend endpoint.
-
-## Next phase
-
-Future phases can add the concrete Django/DRF authentication adapter once the backend authentication contract exists.
+1. Run without `VITE_DASHBOARD_ADAPTER=mock` → a clear not-configured dashboard error is shown; no fake live metrics appear.
+2. Run with `VITE_DASHBOARD_ADAPTER=mock VITE_DASHBOARD_SCENARIO=populated` → summary cards, device health, active faults, and monitoring snapshot appear.
+3. Use `VITE_DASHBOARD_SCENARIO=empty` → zero summary values and appropriate empty states appear.
+4. Use `VITE_DASHBOARD_SCENARIO=partial` → returned data is shown with a partial-data warning.
+5. Use `VITE_DASHBOARD_SCENARIO=error` → the dashboard error state is shown.
+6. Use `VITE_DASHBOARD_SCENARIO=loading` → the loading state remains visible.
+7. Resize across desktop, tablet, and mobile widths → dashboard sections remain readable and usable.
+8. Device and fault states remain understandable from text/symbol labels even without color perception.
