@@ -34,6 +34,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  useEffect(() => {
+    if (!session) return
+
+    const remainingMs = session.expiresAt - Date.now()
+    if (remainingMs <= 0) {
+      void authService.logout().finally(() => setSession(null))
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      void authService.logout().finally(() => setSession(null))
+    }, remainingMs)
+
+    return () => window.clearTimeout(timer)
+  }, [session])
+
   const login = useCallback(async (credentials: AuthCredentials) => {
     const nextSession = await authService.login(credentials)
     setSession(nextSession)
