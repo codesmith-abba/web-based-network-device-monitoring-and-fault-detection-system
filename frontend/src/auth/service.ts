@@ -1,28 +1,24 @@
 import { AuthError } from './types'
-import type { AuthCredentials, AuthService, AuthSession } from './types'
+import type { AuthService, AuthSession } from './types'
 
-const SESSION_STORAGE_KEY = 'netwatch.auth.session'
+const MOCK_SESSION_STORAGE_KEY = 'netwatch.auth.session.mock'
 const MOCK_SESSION_DURATION_MS = 8 * 60 * 60 * 1000
 
-function readStoredSession(): AuthSession | null {
-  const raw = sessionStorage.getItem(SESSION_STORAGE_KEY)
+function readMockSession(): AuthSession | null {
+  const raw = sessionStorage.getItem(MOCK_SESSION_STORAGE_KEY)
   if (!raw) return null
 
   try {
     const session = JSON.parse(raw) as AuthSession
     if (!session.user?.id || !session.user?.username || session.expiresAt <= Date.now()) {
-      sessionStorage.removeItem(SESSION_STORAGE_KEY)
+      sessionStorage.removeItem(MOCK_SESSION_STORAGE_KEY)
       return null
     }
     return session
   } catch {
-    sessionStorage.removeItem(SESSION_STORAGE_KEY)
+    sessionStorage.removeItem(MOCK_SESSION_STORAGE_KEY)
     return null
   }
-}
-
-function storeSession(session: AuthSession) {
-  sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
 }
 
 const mockAuthService: AuthService = {
@@ -46,16 +42,16 @@ const mockAuthService: AuthService = {
       },
       expiresAt: Date.now() + MOCK_SESSION_DURATION_MS,
     }
-    storeSession(session)
+    sessionStorage.setItem(MOCK_SESSION_STORAGE_KEY, JSON.stringify(session))
     return session
   },
 
   async logout() {
-    sessionStorage.removeItem(SESSION_STORAGE_KEY)
+    sessionStorage.removeItem(MOCK_SESSION_STORAGE_KEY)
   },
 
   async getSession() {
-    return readStoredSession()
+    return readMockSession()
   },
 }
 
@@ -67,10 +63,10 @@ const unconfiguredAuthService: AuthService = {
     )
   },
   async logout() {
-    sessionStorage.removeItem(SESSION_STORAGE_KEY)
+    sessionStorage.removeItem(MOCK_SESSION_STORAGE_KEY)
   },
   async getSession() {
-    return readStoredSession()
+    return null
   },
 }
 
