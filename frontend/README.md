@@ -1,75 +1,65 @@
-# React + TypeScript + Vite
+# Network Monitoring Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript frontend for the Web-Based Network Device Monitoring and Fault Detection System.
 
-Currently, two official plugins are available:
+## Phase 1 — Foundation
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Phase 1 replaces the Vite starter screen with the application's responsive administrator shell and establishes the visual foundation for the monitoring system.
 
-## React Compiler
+Implemented:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Responsive sidebar navigation
+- Responsive mobile navigation drawer
+- Application header
+- Dashboard landing page foundation
+- Network-monitoring visual language and reusable icon primitives
+- Tailwind CSS v4 with Vite integration
+- Accessible focus states and semantic navigation
+- Typed navigation model
+- No fake monitoring metrics, device counts, or fault events
+- Frontend structure prepared for later Django REST API integration
 
-## Expanding the ESLint configuration
+Navigation items for features that are not yet implemented are intentionally disabled rather than presenting fake functionality.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Architecture
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```text
+src/
+├── components/       # Shared UI primitives and icons
+├── layouts/          # Application-level layouts and shell
+├── pages/            # Page-level views
+└── types/            # Shared TypeScript contracts
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+Feature-specific folders, API services, hooks, and domain types will be introduced when their corresponding phases are implemented. This keeps Phase 1 small and avoids creating unused architecture prematurely.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Technology
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- React
+- TypeScript
+- Vite
+- Tailwind CSS v4
 
+## Development
+
+From `frontend/`:
+
+```bash
+npm install
+npm run dev
 ```
+
+## Validation
+
+Run:
+
+```bash
+npm run lint
+npm run build
+```
+
+The repository's existing `package-lock.json` predates the Phase 1 Tailwind dependency additions. Run `npm install` before validation so npm regenerates the lockfile with the newly declared dependencies; the lockfile should then be committed as part of the Phase 1 dependency update.
+
+## Next phase
+
+Phase 2 will implement the frontend authentication experience. Backend authentication and API integration are intentionally outside Phase 1.
