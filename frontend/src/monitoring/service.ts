@@ -24,7 +24,6 @@ const demoHistory: Record<string, MonitoringRecord[]> = {
 function buildSnapshot(device: Device): DeviceMonitoringSnapshot {
   const currentScenario = scenario()
   if (currentScenario === 'error') throw new MonitoringServiceError('The temporary monitoring adapter could not load monitoring data.')
-  if (currentScenario === 'loading') return new Promise<DeviceMonitoringSnapshot>(() => undefined) as unknown as DeviceMonitoringSnapshot
 
   const history = currentScenario === 'empty' ? [] : (demoHistory[device.id] ?? [])
   const partialHistory = currentScenario === 'partial' ? history.slice(0, 1) : history
@@ -53,6 +52,7 @@ function buildSnapshot(device: Device): DeviceMonitoringSnapshot {
 
 const mockService: DeviceMonitoringService = {
   async getSnapshot(deviceId) {
+    if (scenario() === 'loading') return new Promise<DeviceMonitoringSnapshot>(() => undefined)
     const devices = await getDeviceService().list()
     const device = devices.find((item) => item.id === deviceId)
     if (!device) throw new MonitoringServiceError('The requested device could not be found.')
