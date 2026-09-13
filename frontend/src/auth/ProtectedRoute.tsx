@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { useAuth } from './AuthProvider'
 
@@ -8,7 +9,13 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { isAuthenticated, isLoading } = useAuth()
 
-  if (isLoading) {
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      window.location.replace(`/login?next=${encodeURIComponent(window.location.pathname)}`)
+    }
+  }, [isAuthenticated, isLoading])
+
+  if (isLoading || !isAuthenticated) {
     return (
       <main className="grid min-h-screen place-items-center bg-slate-50 px-6" aria-live="polite">
         <div className="text-center">
@@ -17,11 +24,6 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         </div>
       </main>
     )
-  }
-
-  if (!isAuthenticated) {
-    window.location.replace(`/login?next=${encodeURIComponent(window.location.pathname)}`)
-    return null
   }
 
   return <>{children}</>
