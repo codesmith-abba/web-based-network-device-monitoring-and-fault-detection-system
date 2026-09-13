@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ActivityIcon, AlertTriangleIcon, ServerIcon } from '../components/icons'
+import { ActivityIcon, AlertTriangleIcon, HistoryIcon, ServerIcon } from '../components/icons'
 import { EmptyState } from '../components/EmptyState'
 import { ErrorState } from '../components/ErrorState'
 import { FaultSeverityBadge } from '../components/FaultSeverityBadge'
@@ -76,7 +76,6 @@ export function DashboardPage() {
       </section>
 
       {isLoading && <LoadingState />}
-
       {!isLoading && error && <ErrorState description={error.message} />}
 
       {!isLoading && !error && data && (
@@ -103,7 +102,7 @@ export function DashboardPage() {
               {data.deviceHealth.length === 0 ? (
                 <div className="mt-5"><EmptyState title="No device health data" description="No monitored device status records are available for this dashboard yet." icon={<ServerIcon className="size-5" />} /></div>
               ) : (
-                <ul className="mt-3"><>{data.deviceHealth.map((device) => <DeviceHealthRow key={device.id} device={device} />)}</></ul>
+                <ul className="mt-3">{data.deviceHealth.map((device) => <DeviceHealthRow key={device.id} device={device} />)}</ul>
               )}
             </article>
 
@@ -116,9 +115,9 @@ export function DashboardPage() {
                 <div className="mt-5"><EmptyState title="No monitored devices" description="Add devices through the device management workflow to begin monitoring network health." /></div>
               ) : (
                 <div className="mt-6">
-                  <div className="h-3 overflow-hidden rounded-full bg-slate-100" aria-label="Device health distribution">
-                    <div className="flex h-full" style={{ width: `${Math.min(100, (healthCounts.online / data.summary.totalDevices) * 100)}%` }}><div className="h-full w-full bg-emerald-500" /></div>
-                    <div className="flex h-full" style={{ width: `${Math.min(100, (healthCounts.offline / data.summary.totalDevices) * 100)}%` }}><div className="h-full w-full bg-rose-500" /></div>
+                  <div className="flex h-3 overflow-hidden rounded-full bg-slate-100" aria-label="Device health distribution">
+                    <div className="h-full bg-emerald-500" style={{ width: `${Math.min(100, (healthCounts.online / data.summary.totalDevices) * 100)}%` }} />
+                    <div className="h-full bg-rose-500" style={{ width: `${Math.min(100, (healthCounts.offline / data.summary.totalDevices) * 100)}%` }} />
                   </div>
                   <div className="mt-5 space-y-3 text-sm">
                     <div className="flex items-center justify-between"><span className="flex items-center gap-2"><span className="grid size-5 place-items-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-700">✓</span>Online</span><strong>{data.summary.onlineDevices}</strong></div>
@@ -147,7 +146,7 @@ export function DashboardPage() {
             </article>
 
             <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/[0.02] sm:p-6">
-              <div className="flex items-start justify-between gap-4"><div><h2 className="text-sm font-semibold text-slate-950">Monitoring snapshot</h2><p className="mt-1 text-xs text-slate-500">Recent availability, latency, and packet-loss measurements when supplied.</p></div><HistoryIconFallback /></div>
+              <div className="flex items-start justify-between gap-4"><div><h2 className="text-sm font-semibold text-slate-950">Monitoring snapshot</h2><p className="mt-1 text-xs text-slate-500">Recent availability, latency, and packet-loss measurements when supplied.</p></div><HistoryIcon className="size-5 text-slate-400" /></div>
               {!data.monitoringTrend?.length ? (
                 <div className="mt-5"><EmptyState title="No historical measurements" description="Historical monitoring trends will appear here when measurement data is available." /></div>
               ) : (
@@ -169,8 +168,4 @@ export function DashboardPage() {
       )}
     </div>
   )
-}
-
-function HistoryIconFallback() {
-  return <ActivityIcon className="size-5 text-slate-400" />
 }
