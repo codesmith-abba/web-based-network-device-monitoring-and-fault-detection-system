@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import {
   ActivityIcon,
   AlertTriangleIcon,
@@ -15,7 +16,7 @@ import {
 import type { NavigationItem } from '../types/navigation'
 
 interface AppShellProps {
-  children: React.ReactNode
+  children: ReactNode
 }
 
 const navigation: NavigationItem[] = [
@@ -74,7 +75,7 @@ export function AppShell({ children }: AppShellProps) {
                 <Icon className="size-[18px] shrink-0" />
                 <span className="min-w-0 flex-1">
                   <span className="block text-sm font-medium">{item.label}</span>
-                  {!item.available && <span className={`mt-0.5 block text-[10px] ${active ? 'text-white/60' : 'text-slate-400'}`}>Coming soon</span>}
+                  {!item.available && <span className="mt-0.5 block text-[10px] text-slate-400">Coming soon</span>}
                 </span>
                 {active && <ChevronRightIcon className="size-4 opacity-60" />}
               </button>
