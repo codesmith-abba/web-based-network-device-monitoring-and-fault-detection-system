@@ -1,24 +1,65 @@
+import { useEffect, useMemo, useState } from 'react'
 import { ActivityIcon, AlertTriangleIcon, ServerIcon } from '../components/icons'
+import { EmptyState } from '../components/EmptyState'
+import { ErrorState } from '../components/ErrorState'
+import { FaultSeverityBadge } from '../components/FaultSeverityBadge'
+import { LoadingState } from '../components/LoadingState'
+import { StatCard } from '../components/StatCard'
+import { StatusBadge } from '../components/StatusBadge'
+import { DashboardError, type DashboardData, type DeviceHealthItem } from '../dashboard/types'
+import { getDashboardData } from '../dashboard/service'
 
-const sections = [
-  {
-    title: 'Device visibility',
-    description: 'Device totals and online/offline status will appear here once monitoring data is connected.',
-    icon: ServerIcon,
-  },
-  {
-    title: 'Fault visibility',
-    description: 'Active fault summaries and severity information will be surfaced here in the monitoring phases.',
-    icon: AlertTriangleIcon,
-  },
-  {
-    title: 'Monitoring health',
-    description: 'Latency, packet loss, availability, and supported SNMP metrics will be added without fabricating live data.',
-    icon: ActivityIcon,
-  },
-]
+function DeviceHealthRow({ device }: { device: DeviceHealthItem }) {
+  return (
+    <li className="flex flex-col gap-3 border-b border-slate-100 py-4 last:border-b-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="truncate text-sm font-semibold text-slate-900">{device.name}</p>
+          <StatusBadge status={device.status} />
+        </div>
+        <p className="mt-1 text-xs text-slate-500">{device.type} · {device.address}</p>
+      </div>
+      <div className="grid grid-cols-3 gap-4 text-right text-xs">
+        <div><p className="text-slate-400">Availability</p><p className="mt-1 font-semibold text-slate-700">{device.availability !== undefined ? `${device.availability}%` : '—'}</p></div>
+        <div><p className="text-slate-400">Latency</p><p className="mt-1 font-semibold text-slate-700">{device.latencyMs !== undefined ? `${device.latencyMs} ms` : '—'}</p></div>
+        <div><p className="text-slate-400">Loss</p><p className="mt-1 font-semibold text-slate-700">{device.packetLossPercent !== undefined ? `${device.packetLossPercent}%` : '—'}</p></div>
+      </div>
+    </li>
+  )
+}
 
 export function DashboardPage() {
+  const [data, setData] = useState<DashboardData | null>(null)
+  const [error, setError] = useState<DashboardError | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    setIsLoading(true)
+    getDashboardData()
+      .then((result) => { if (active) setData(result) })
+      .catch((reason: unknown) => {
+        if (!active) return
+        setError(reason instanceof DashboardError ? reason : new DashboardError('An unexpected dashboard error occurred.'))
+      })
+      .finally(() => { if (active) setIsLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  const healthCounts = useMemo(() => {
+    const devices = data?.deviceHealth ?? []
+    return {
+      online: devices.filter((device) => device.status === 'online').length,
+      offline: devices.filter((device) => device.status === 'offline').length,
+      unknown: devices.filter((device) => device.status === 'unknown').length,
+    }
+  }, [data])
+
+  const isPartial = Boolean(data && (
+    data.deviceHealth.length < data.summary.totalDevices ||
+    data.activeFaults.length < data.summary.activeFaults
+  ))
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
       <section className="mb-8">
@@ -26,30 +67,110 @@ export function DashboardPage() {
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">Network overview</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Your monitoring workspace is ready. Live device and fault information will be connected in later phases.</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Centralized visibility into device availability, network health, and active faults.</p>
           </div>
           <div className="inline-flex w-fit items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 shadow-sm">
-            <span className="size-2 rounded-full bg-emerald-500" /> Foundation ready
+            <ActivityIcon className="size-3.5" /> Monitoring dashboard
           </div>
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3" aria-label="Dashboard modules">
-        {sections.map(({ title, description, icon: Icon }) => (
-          <article key={title} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/[0.02]">
-            <div className="mb-5 grid size-10 place-items-center rounded-xl bg-slate-100 text-slate-700"><Icon className="size-5" /></div>
-            <h2 className="text-sm font-semibold text-slate-950">{title}</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">{description}</p>
-          </article>
-        ))}
-      </section>
+      {isLoading && <LoadingState />}
 
-      <section className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-6 sm:p-8">
-        <div className="max-w-2xl">
-          <p className="text-sm font-semibold text-slate-900">Monitoring data not connected yet</p>
-          <p className="mt-2 text-sm leading-6 text-slate-500">Phase 1 intentionally contains no fake device counts, monitoring measurements, or fault events. The dashboard is structured to receive real Django REST API data in the integration phases.</p>
-        </div>
-      </section>
+      {!isLoading && error && <ErrorState description={error.message} />}
+
+      {!isLoading && !error && data && (
+        <>
+          {isPartial && (
+            <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status">
+              <span className="font-semibold">Partial monitoring data.</span> Some device or fault records are not available yet; the dashboard is showing only the data returned by the current adapter.
+            </div>
+          )}
+
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Network summary">
+            <StatCard label="Total Devices" value={data.summary.totalDevices} description="Devices configured for monitoring" icon={ServerIcon} />
+            <StatCard label="Online" value={data.summary.onlineDevices} description="Devices currently reporting as reachable" icon={ActivityIcon} tone="positive" />
+            <StatCard label="Offline" value={data.summary.offlineDevices} description="Devices currently reporting as unreachable" icon={ServerIcon} tone="danger" />
+            <StatCard label="Active Faults" value={data.summary.activeFaults} description="Fault events requiring attention" icon={AlertTriangleIcon} tone="warning" />
+          </section>
+
+          <section className="mt-6 grid gap-6 xl:grid-cols-[1.45fr_1fr]">
+            <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/[0.02] sm:p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div><h2 className="text-sm font-semibold text-slate-950">Device health</h2><p className="mt-1 text-xs text-slate-500">Current availability and connectivity status.</p></div>
+                <ServerIcon className="size-5 text-slate-400" />
+              </div>
+              {data.deviceHealth.length === 0 ? (
+                <div className="mt-5"><EmptyState title="No device health data" description="No monitored device status records are available for this dashboard yet." icon={<ServerIcon className="size-5" />} /></div>
+              ) : (
+                <ul className="mt-3"><>{data.deviceHealth.map((device) => <DeviceHealthRow key={device.id} device={device} />)}</></ul>
+              )}
+            </article>
+
+            <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/[0.02] sm:p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div><h2 className="text-sm font-semibold text-slate-950">Health status overview</h2><p className="mt-1 text-xs text-slate-500">Distribution of returned device states.</p></div>
+                <ActivityIcon className="size-5 text-slate-400" />
+              </div>
+              {data.summary.totalDevices === 0 ? (
+                <div className="mt-5"><EmptyState title="No monitored devices" description="Add devices through the device management workflow to begin monitoring network health." /></div>
+              ) : (
+                <div className="mt-6">
+                  <div className="h-3 overflow-hidden rounded-full bg-slate-100" aria-label="Device health distribution">
+                    <div className="flex h-full" style={{ width: `${Math.min(100, (healthCounts.online / data.summary.totalDevices) * 100)}%` }}><div className="h-full w-full bg-emerald-500" /></div>
+                    <div className="flex h-full" style={{ width: `${Math.min(100, (healthCounts.offline / data.summary.totalDevices) * 100)}%` }}><div className="h-full w-full bg-rose-500" /></div>
+                  </div>
+                  <div className="mt-5 space-y-3 text-sm">
+                    <div className="flex items-center justify-between"><span className="flex items-center gap-2"><span className="grid size-5 place-items-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-700">✓</span>Online</span><strong>{data.summary.onlineDevices}</strong></div>
+                    <div className="flex items-center justify-between"><span className="flex items-center gap-2"><span className="grid size-5 place-items-center rounded-full bg-rose-50 text-xs font-bold text-rose-700">×</span>Offline</span><strong>{data.summary.offlineDevices}</strong></div>
+                    <div className="flex items-center justify-between"><span className="flex items-center gap-2"><span className="grid size-5 place-items-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">?</span>Unknown / not returned</span><strong>{Math.max(0, data.summary.totalDevices - data.summary.onlineDevices - data.summary.offlineDevices)}</strong></div>
+                  </div>
+                </div>
+              )}
+            </article>
+          </section>
+
+          <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_1.45fr]">
+            <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/[0.02] sm:p-6">
+              <div className="flex items-start justify-between gap-4"><div><h2 className="text-sm font-semibold text-slate-950">Active faults</h2><p className="mt-1 text-xs text-slate-500">Faults requiring administrator attention.</p></div><AlertTriangleIcon className="size-5 text-slate-400" /></div>
+              {data.activeFaults.length === 0 ? (
+                <div className="mt-5"><EmptyState title="No active faults" description="There are no active fault records in the data returned by the monitoring service." /></div>
+              ) : (
+                <ul className="mt-3 divide-y divide-slate-100">
+                  {data.activeFaults.map((fault) => (
+                    <li key={fault.id} className="py-4 first:pt-2 last:pb-0">
+                      <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-sm font-semibold text-slate-900">{fault.title}</p><p className="mt-1 text-xs text-slate-500">{fault.deviceName} · {fault.detectedAt}</p></div><FaultSeverityBadge severity={fault.severity} /></div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
+
+            <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-950/[0.02] sm:p-6">
+              <div className="flex items-start justify-between gap-4"><div><h2 className="text-sm font-semibold text-slate-950">Monitoring snapshot</h2><p className="mt-1 text-xs text-slate-500">Recent availability, latency, and packet-loss measurements when supplied.</p></div><HistoryIconFallback /></div>
+              {!data.monitoringTrend?.length ? (
+                <div className="mt-5"><EmptyState title="No historical measurements" description="Historical monitoring trends will appear here when measurement data is available." /></div>
+              ) : (
+                <div className="mt-5" role="img" aria-label="Recent monitoring availability trend">
+                  <div className="flex h-40 items-end gap-2 border-b border-l border-slate-200 px-2 pb-0">
+                    {data.monitoringTrend.map((point) => (
+                      <div key={point.label} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-2" title={`${point.label}: ${point.availabilityPercent ?? '—'}% availability`}>
+                        <div className="w-full max-w-10 rounded-t-md bg-slate-800" style={{ height: `${Math.max(8, Math.min(100, point.availabilityPercent ?? 0))}%` }} />
+                        <span className="text-[10px] text-slate-400">{point.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-xs text-slate-500">Bars represent returned availability percentages. Detailed historical analytics can consume the same typed trend contract later.</p>
+                </div>
+              )}
+            </article>
+          </section>
+        </>
+      )}
     </div>
   )
+}
+
+function HistoryIconFallback() {
+  return <ActivityIcon className="size-5 text-slate-400" />
 }
