@@ -1,17 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { AuthContext } from './auth-context'
 import { getAuthService } from './service'
 import type { AuthCredentials, AuthSession } from './types'
 
-interface AuthContextValue {
-  session: AuthSession | null
-  isLoading: boolean
-  isAuthenticated: boolean
-  login: (credentials: AuthCredentials) => Promise<AuthSession>
-  logout: () => Promise<void>
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null)
 const authService = getAuthService()
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -61,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null)
   }, [])
 
-  const value = useMemo<AuthContextValue>(() => ({
+  const value = useMemo(() => ({
     session,
     isLoading,
     isAuthenticated: session !== null,
@@ -70,10 +62,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }), [isLoading, login, logout, session])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (!context) throw new Error('useAuth must be used within an AuthProvider')
-  return context
 }
