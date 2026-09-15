@@ -6,15 +6,14 @@ from .device_monitoring_api import (
     DeviceMonitoringSummaryView,
     DeviceSNMPView,
 )
+from .historical_api import FaultHistoryView, MonitoringHistoryView
 from .views import (
     DashboardView,
     DeviceViewSet,
-    FaultHistoryView,
     FaultViewSet,
     LoginView,
     LogoutView,
     MeView,
-    MonitoringHistoryView,
     MonitoringRecordViewSet,
     NotificationViewSet,
 )
