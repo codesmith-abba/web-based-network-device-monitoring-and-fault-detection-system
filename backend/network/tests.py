@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -6,6 +7,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from .models import Device, FaultEvent, MonitoringConfiguration, MonitoringRecord, Notification
+from .monitoring import InvalidMonitoringConfiguration, PingResult, monitor_device
 
 
 User = get_user_model()
@@ -108,6 +110,92 @@ class NetworkApiTests(APITestCase):
         self.client.credentials()
         response = self.client.get('/api/devices/')
         self.assertEqual(response.status_code, 401)
+
+    def test_monitoring_snapshot_returns_latest_and_history(self):
+        MonitoringRecord.objects.create(
+            device=self.device,
+            timestamp=timezone.now() - timedelta(minutes=1),
+            reachable=True,
+            latency_ms=12.5,
+            packet_loss_percent=0,
+        )
+        response = self.client.get(f'/api/devices/{self.device.id}/monitoring-snapshot/')
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(response.data['latest'])
+        self.assertEqual(response.data['latest']['latencyMs'], 12.5)
+        self.assertIn('configuration', response.data)
+
+    @patch('network.monitoring.ping_ipv4')
+    def test_monitor_endpoint_records_reachable_device_and_latency(self, mock_ping):
+        mock_ping.return_value = PingResult(True, 8.4, 0.0)
+        response = self.client.post(f'/api/devices/{self.device.id}/monitor/', {}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data['reachable'])
+        self.assertEqual(response.data['latencyMs'], 8.4)
+        self.assertEqual(response.data['packetLossPercent'], 0.0)
+        record = MonitoringRecord.objects.get(device=self.device)
+        self.assertTrue(record.reachable)
+        self.assertEqual(record.latency_ms, 8.4)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.status, Device.Status.ONLINE)
+
+    @patch('network.monitoring.ping_ipv4')
+    def test_monitor_endpoint_records_unreachable_device_without_crashing(self, mock_ping):
+        mock_ping.return_value = PingResult(False, None, 100.0, 'ICMP request timed out.')
+        response = self.client.post(f'/api/devices/{self.device.id}/monitor/', {}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data['reachable'])
+        self.assertIsNone(response.data['latencyMs'])
+        self.assertEqual(response.data['packetLossPercent'], 100.0)
+        record = MonitoringRecord.objects.get(device=self.device)
+        self.assertFalse(record.reachable)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.status, Device.Status.OFFLINE)
+
+    @patch('network.monitoring.ping_ipv4')
+    def test_monitor_endpoint_handles_system_ping_failure(self, mock_ping):
+        mock_ping.return_value = PingResult(False, None, 100.0, 'The system ping utility is not available.')
+        response = self.client.post(f'/api/devices/{self.device.id}/monitor/', {}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data['reachable'])
+        self.assertEqual(MonitoringRecord.objects.filter(device=self.device).count(), 1)
+
+    def test_monitor_rejects_disabled_monitoring_configuration(self):
+        self.device.monitoring_enabled = False
+        self.device.save(update_fields=['monitoring_enabled'])
+        response = self.client.post(f'/api/devices/{self.device.id}/monitor/', {}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('disabled', response.data['detail'])
+        self.assertFalse(MonitoringRecord.objects.filter(device=self.device).exists())
+
+    def test_monitor_rejects_invalid_monitoring_interval(self):
+        configuration = MonitoringConfiguration.objects.get(device=self.device)
+        configuration.interval_seconds = 1
+        configuration.save(update_fields=['interval_seconds'])
+        response = self.client.post(f'/api/devices/{self.device.id}/monitor/', {}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('at least 5 seconds', response.data['detail'])
+        self.assertFalse(MonitoringRecord.objects.filter(device=self.device).exists())
+
+    def test_monitoring_records_are_exposed_through_api(self):
+        record = MonitoringRecord.objects.create(
+            device=self.device,
+            timestamp=timezone.now(),
+            reachable=True,
+            latency_ms=15.25,
+            packet_loss_percent=0,
+        )
+        response = self.client.get(f'/api/monitoring-records/?deviceId={self.device.id}')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data[0]['id'], str(record.id))
+        self.assertEqual(response.data[0]['latencyMs'], 15.25)
+
+    def test_monitoring_endpoint_requires_administrator(self):
+        operator = User.objects.create_user(username='operator', password='operator123')
+        token = Token.objects.create(user=operator)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {token.key}')
+        response = self.client.post(f'/api/devices/{self.device.id}/monitor/', {}, format='json')
+        self.assertEqual(response.status_code, 403)
 
     def test_monitoring_snapshot_returns_latest_and_history(self):
         MonitoringRecord.objects.create(
@@ -248,3 +336,62 @@ class BackendFoundationTests(APITestCase):
     def test_health_check_rejects_non_get_requests(self):
         response = self.client.post('/api/health/', {}, format='json')
         self.assertEqual(response.status_code, 405)
+
+
+class MonitoringEngineTests(APITestCase):
+    def setUp(self):
+        self.device = Device.objects.create(
+            name='Monitoring Router',
+            ip_address='10.0.0.1',
+            device_type=Device.DeviceType.ROUTER,
+        )
+        MonitoringConfiguration.objects.create(device=self.device, interval_seconds=60)
+
+    @patch('network.monitoring.subprocess.run')
+    def test_ping_ipv4_parses_latency(self, mock_run):
+        from .monitoring import ping_ipv4
+
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = '64 bytes from 10.0.0.1: time=4.32 ms'
+        mock_run.return_value.stderr = ''
+        result = ping_ipv4('10.0.0.1')
+        self.assertTrue(result.reachable)
+        self.assertEqual(result.latency_ms, 4.32)
+        self.assertEqual(result.packet_loss_percent, 0.0)
+        mock_run.assert_called_once()
+        self.assertFalse(mock_run.call_args.kwargs.get('shell', False))
+
+    @patch('network.monitoring.subprocess.run', side_effect=__import__('subprocess').TimeoutExpired(cmd=['ping'], timeout=2))
+    def test_ping_ipv4_handles_timeout(self, mock_run):
+        from .monitoring import ping_ipv4
+
+        result = ping_ipv4('10.0.0.1')
+        self.assertFalse(result.reachable)
+        self.assertIsNone(result.latency_ms)
+        self.assertEqual(result.packet_loss_percent, 100.0)
+        self.assertIn('timed out', result.error)
+
+    def test_ping_ipv4_rejects_invalid_address(self):
+        from .monitoring import ping_ipv4
+
+        with self.assertRaises(InvalidMonitoringConfiguration):
+            ping_ipv4('not-an-ip')
+
+    @patch('network.monitoring.ping_ipv4')
+    def test_monitor_device_persists_result_and_status(self, mock_ping):
+        mock_ping.return_value = PingResult(True, 2.75, 0.0)
+        record = monitor_device(self.device)
+        self.assertEqual(record.device_id, self.device.id)
+        self.assertTrue(record.reachable)
+        self.assertEqual(record.latency_ms, 2.75)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.status, Device.Status.ONLINE)
+
+    @patch('network.monitoring.ping_ipv4')
+    def test_monitor_device_persists_network_failure_as_unreachable(self, mock_ping):
+        mock_ping.return_value = PingResult(False, None, 100.0, 'Network error')
+        record = monitor_device(self.device)
+        self.assertFalse(record.reachable)
+        self.assertEqual(record.packet_loss_percent, 100.0)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.status, Device.Status.OFFLINE)
