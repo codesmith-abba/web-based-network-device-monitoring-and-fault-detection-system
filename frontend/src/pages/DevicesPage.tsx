@@ -10,11 +10,11 @@ import { DeviceServiceError, type Device, type DeviceRegistrationInput, type Dev
 
 const typeLabels: Record<DeviceType, string> = { router: 'Router', switch: 'Switch', server: 'Server', 'access-point': 'Access Point', firewall: 'Firewall', other: 'Other' }
 const typeOptions = Object.entries(typeLabels) as [DeviceType, string][]
-const initialForm: DeviceRegistrationInput = { name: '', ipAddress: '', type: '', monitoring: 'enabled' }
+const initialForm: DeviceRegistrationInput = { name: '', ipAddress: '', type: '', monitoring: true }
 const pageSize = 5
 
 function DeviceForm({ device, onClose, onSaved }: { device: Device | null; onClose: () => void; onSaved: (device: Device) => void }) {
-  const [form, setForm] = useState<DeviceRegistrationInput>(device ? { name: device.name, ipAddress: device.ipAddress, type: device.type, monitoring: device.monitoring } : initialForm)
+  const [form, setForm] = useState<DeviceRegistrationInput>(device ? { name: device.name, ipAddress: device.ipAddress, type: device.type, monitoring: device.monitoring === 'enabled' } : initialForm)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -24,7 +24,6 @@ function DeviceForm({ device, onClose, onSaved }: { device: Device | null; onClo
     if (!form.ipAddress.trim()) next.ipAddress = 'IP address is required.'
     else if (!isValidIp(form.ipAddress)) next.ipAddress = 'Enter a valid IPv4 address.'
     if (!form.type) next.type = 'Device type is required.'
-    if (!form.monitoring) next.monitoring = 'Monitoring configuration is required.'
     setErrors(next)
     return Object.keys(next).length === 0
   }
@@ -47,7 +46,7 @@ function DeviceForm({ device, onClose, onSaved }: { device: Device | null; onClo
         <label className="block text-sm font-medium text-slate-700">Device name<input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" aria-invalid={Boolean(errors.name)} />{errors.name && <span className="mt-1 block text-xs text-rose-700">{errors.name}</span>}</label>
         <label className="block text-sm font-medium text-slate-700">IP address<input value={form.ipAddress} onChange={(e) => setForm({ ...form, ipAddress: e.target.value })} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 font-mono text-sm" inputMode="decimal" placeholder="192.168.1.1" aria-invalid={Boolean(errors.ipAddress)} />{errors.ipAddress && <span className="mt-1 block text-xs text-rose-700">{errors.ipAddress}</span>}</label>
         <label className="block text-sm font-medium text-slate-700">Device type<select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as DeviceType })} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm" aria-invalid={Boolean(errors.type)}><option value="">Select device type</option>{typeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{errors.type && <span className="mt-1 block text-xs text-rose-700">{errors.type}</span>}</label>
-        <fieldset><legend className="text-sm font-medium text-slate-700">Monitoring configuration</legend><div className="mt-2 grid gap-2 sm:grid-cols-2"><label className="rounded-xl border border-slate-200 p-3 text-sm"><input type="radio" name="monitoring" checked={form.monitoring === 'enabled'} onChange={() => setForm({ ...form, monitoring: 'enabled' })} /> <span className="ml-1">Enable monitoring</span></label><label className="rounded-xl border border-slate-200 p-3 text-sm"><input type="radio" name="monitoring" checked={form.monitoring === 'disabled'} onChange={() => setForm({ ...form, monitoring: 'disabled' })} /> <span className="ml-1">Disable monitoring</span></label></div>{errors.monitoring && <span className="mt-1 block text-xs text-rose-700">{errors.monitoring}</span>}</fieldset>
+        <fieldset><legend className="text-sm font-medium text-slate-700">Monitoring configuration</legend><div className="mt-2 grid gap-2 sm:grid-cols-2"><label className="rounded-xl border border-slate-200 p-3 text-sm"><input type="radio" name="monitoring" checked={form.monitoring === true} onChange={() => setForm({ ...form, monitoring: true })} /> <span className="ml-1">Enable monitoring</span></label><label className="rounded-xl border border-slate-200 p-3 text-sm"><input type="radio" name="monitoring" checked={form.monitoring === false} onChange={() => setForm({ ...form, monitoring: false })} /> <span className="ml-1">Disable monitoring</span></label></div>{errors.monitoring && <span className="mt-1 block text-xs text-rose-700">{errors.monitoring}</span>}</fieldset>
       </div>
       <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold">Cancel</button><button type="submit" disabled={saving} className="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">{saving ? 'Saving…' : device ? 'Save changes' : 'Register device'}</button></div>
     </form>
@@ -93,7 +92,7 @@ export function DevicesPage() {
   const visible = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize)
   const toggleMonitoring = async (device: Device) => {
     setActionError('')
-    try { const updated = await getDeviceService().setMonitoring(device.id, device.monitoring === 'enabled' ? 'disabled' : 'enabled'); setDevices((current) => current.map((item) => item.id === updated.id ? updated : item)) }
+    try { const updated = await getDeviceService().setMonitoring(device.id, device.monitoring !== 'enabled'); setDevices((current) => current.map((item) => item.id === updated.id ? updated : item)) }
     catch (reason: unknown) { setActionError(reason instanceof DeviceServiceError ? reason.message : 'Unable to change monitoring state.') }
   }
   const saved = (device: Device) => { setDevices((current) => current.some((item) => item.id === device.id) ? current.map((item) => item.id === device.id ? device : item) : [device, ...current]); setEditing(undefined) }

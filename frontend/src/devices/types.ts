@@ -17,7 +17,7 @@ export interface DeviceRegistrationInput {
   name: string
   ipAddress: string
   type: DeviceType | ''
-  monitoring: MonitoringState
+  monitoring: boolean
 }
 
 export type DeviceListScenario = 'populated' | 'empty' | 'partial' | 'error' | 'loading'
@@ -36,5 +36,5 @@ export interface DeviceService {
   list: () => Promise<Device[]>
   create: (input: DeviceRegistrationInput) => Promise<Device>
   update: (id: string, input: DeviceRegistrationInput) => Promise<Device>
-  setMonitoring: (id: string, monitoring: MonitoringState) => Promise<Device>
+  setMonitoring: (id: string, monitoring: boolean) => Promise<Device>
 }
