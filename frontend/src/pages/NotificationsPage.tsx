@@ -32,7 +32,21 @@ export function NotificationsPage() {
     }
   }, [service])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      try {
+        const result = await service.list()
+        if (!cancelled) setNotifications(result.notifications)
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Notifications could not be loaded.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void run()
+    return () => { cancelled = true }
+  }, [service])
 
   const unreadCount = notifications.filter((notification) => notification.status === 'unread').length
   const mockEnabled = import.meta.env.VITE_NOTIFICATIONS_ADAPTER === 'mock'
