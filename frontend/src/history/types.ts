@@ -1,5 +1,4 @@
-import type { FaultEvent, FaultService } from '../faults/types'
-import type { Device } from '../devices/types'
+import type { FaultEvent } from '../faults/types'
 import type { MonitoringRecord } from '../monitoring/types'
 
 export interface HistoricalMonitoringRecord extends MonitoringRecord {
@@ -8,12 +7,6 @@ export interface HistoricalMonitoringRecord extends MonitoringRecord {
 
 export interface MonitoringHistoryResult {
   records: HistoricalMonitoringRecord[]
-}
-
-export interface MonitoringHistoryFilters {
-  deviceId: string | 'all'
-  from: string
-  to: string
 }
 
 export interface MonitoringHistoryService {
@@ -38,9 +31,4 @@ export class HistoryServiceError extends Error {
     this.name = 'HistoryServiceError'
     this.code = code
   }
-}
-
-export interface HistoryDependencies {
-  devices: Device[]
-  faultService: FaultService
 }
