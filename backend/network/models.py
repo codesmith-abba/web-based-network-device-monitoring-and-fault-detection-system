@@ -44,6 +44,9 @@ class MonitoringConfiguration(models.Model):
     interval_seconds = models.PositiveIntegerField(default=60)
     snmp_enabled = models.BooleanField(default=False)
     snmp_version = models.CharField(max_length=10, blank=True, null=True)
+    snmp_community = models.CharField(max_length=255, blank=True, null=True)
+    snmp_port = models.PositiveIntegerField(default=161)
+    snmp_timeout_seconds = models.FloatField(default=2.0)
     available_metrics = models.JSONField(default=list, blank=True)
 
     def __str__(self):
@@ -62,6 +65,23 @@ class MonitoringRecord(models.Model):
         ordering = ['-timestamp']
         indexes = [
             models.Index(fields=['device', '-timestamp']),
+        ]
+
+
+class SNMPMetric(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name='snmp_metrics')
+    timestamp = models.DateTimeField()
+    metric = models.CharField(max_length=80)
+    oid = models.CharField(max_length=128)
+    value = models.TextField()
+    value_type = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        ordering = ['-timestamp', 'metric']
+        indexes = [
+            models.Index(fields=['device', '-timestamp']),
+            models.Index(fields=['device', 'metric', '-timestamp']),
         ]
 
 
