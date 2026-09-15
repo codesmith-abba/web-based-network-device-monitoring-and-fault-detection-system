@@ -2,40 +2,41 @@
 
 React + TypeScript frontend for the Web-Based Network Device Monitoring and Fault Detection System.
 
-## Phase 10 — Frontend Testing and Hardening
+## Phase 23 — Full System Integration
 
-The frontend has been audited as the integration surface for the Django REST backend. Phase 10 focuses on correctness, predictable failure states, responsive behavior, accessibility, strict typing, and production validation without redesigning the existing feature set.
+The frontend is the real integration surface for the Django REST backend. The production service path uses the live API for authentication, dashboard, device management, monitoring, faults, historical records, and notifications.
 
-### Coverage audit
+### Integration architecture
 
-| Area | Verified focus |
-| --- | --- |
-| Authentication | validation, loading, backend failures, protected navigation, session restoration, logout, safe redirect handling |
-| Dashboard | backend loading/error/empty data, responsive summary and fault presentation |
-| Devices | form validation, list/filter/sort/pagination, create/update/monitoring actions, API failures |
-| Device details | invalid/missing device state, monitoring loading/error/empty/partial data |
-| Monitoring | current vs historical separation, chart/table readability, empty/error states |
-| Faults | filtering, acknowledgement, resolution, status updates, API failures, accessible severity/status text |
-| History | monitoring/fault filters, empty/error/loading states, responsive tables and chart overflow |
-| Notifications | unread/read state, details, refresh, backend failures, header indicator |
-| Navigation | protected routes, login redirect, device-detail route matching, responsive shell |
+```text
+React/Vite
+   │
+   │ /api
+   ▼
+Django REST API
+   │
+   ├── Authentication / administrator access
+   ├── Device management
+   ├── Monitoring configuration
+   ├── Immediate ICMP monitoring
+   ├── Historical monitoring records
+   ├── Fault evaluation and lifecycle
+   ├── Notifications
+   └── Dashboard aggregation
+          │
+          ▼
+      Redis / Celery
+          │
+          └── Background monitoring dispatch
+```
 
-### Hardening completed
+### Backend-driven state
 
-- Production service path remains the real Django REST API; no fabricated live data was introduced.
-- Shared API client centralizes token headers, JSON parsing, API errors, and network failures.
-- Authentication uses session storage for the DRF token and validates the session through `/api/auth/me/`.
-- Existing loading, empty, and error UI states remain part of the page-level contracts.
-- User input validation remains explicit on authentication and device management flows.
-- TypeScript application compilation now uses `strict: true` together with unused-code checks.
-- ESLint remains enabled with TypeScript and React Hooks rules.
-- No additional runtime dependency was added; the existing dependency set is intentionally small and is used by the application/toolchain.
-- Vite production builds remain the deployment validation target.
-- A GitHub Actions frontend validation workflow runs `npm ci`, `npm run lint`, and `npm run build` for frontend changes.
+Dashboard, devices, monitoring, faults, history, and notifications use their real backend service boundaries. Frontend code does not recreate backend monitoring or fault business logic.
 
-### Accessibility baseline
+The backend now provides the background monitoring worker path through Celery and Redis. ICMP monitoring results are persisted by Django, evaluated against fault thresholds, and exposed to the dashboard, fault history, and notification APIs. SNMP configuration and collection endpoints are also available through the backend.
 
-The existing UI uses semantic headings, labels, form associations, `aria-invalid`/`aria-describedby` validation feedback, live status messaging where appropriate, keyboard-operable buttons and dialogs, and text/symbol combinations for status information rather than color alone. Responsive tables and charts provide horizontal scrolling where dense data cannot safely collapse.
+The frontend does not claim external email, SMS, browser push, or other notification delivery; the current notification contract is the in-application administrator notification record.
 
 ### API configuration
 
@@ -52,12 +53,6 @@ VITE_API_BASE_URL=/api npm run dev
 Production authentication is the default. The login form calls the real Django login endpoint and stores the returned DRF token in session storage. Session startup validates the token through `/api/auth/me/`; logout calls the backend and clears the token.
 
 The existing mock authentication adapter remains available only for isolated UI testing with `VITE_AUTH_ADAPTER=mock`.
-
-### Backend-driven state
-
-Dashboard, devices, monitoring, faults, history, and notifications use their real backend service boundaries. Frontend code does not recreate backend monitoring or fault business logic.
-
-The backend currently does not implement a live ICMP/SNMP monitoring worker, so the frontend does not claim live monitoring measurements beyond records actually returned by the API. No email, SMS, browser push, or other external notification delivery is claimed.
 
 ## Earlier phases
 
@@ -97,6 +92,10 @@ Administrator notification list, header unread indicator, notification details, 
 
 Shared API client, real authentication, dashboard/device/monitoring/fault/history/notification API services, DRF token handling, API error handling, and Vite development proxy.
 
+### Phase 10 — Frontend Testing and Hardening
+
+The frontend was audited as the integration surface for the Django REST backend. Validation covers authentication, dashboard, devices, monitoring, faults, history, notifications, navigation, strict TypeScript compilation, ESLint, responsive behavior, accessibility, and production builds.
+
 ## Architecture
 
 ```text
@@ -125,6 +124,8 @@ src/
 
 ## Development
 
+Start Redis, Django, Celery worker, and Celery Beat from the backend, then start the frontend.
+
 From `frontend/`:
 
 ```bash
@@ -132,9 +133,7 @@ npm install
 npm run dev
 ```
 
-Start the Django backend on `127.0.0.1:8000` so the Vite `/api` proxy can reach it.
-
-For isolated UI testing, the existing mock adapters can still be enabled explicitly; they are no longer the production service path.
+The Vite development server proxies `/api` to `http://127.0.0.1:8000`.
 
 ## Validation
 
@@ -143,17 +142,33 @@ npm run lint
 npm run build
 ```
 
-The same commands run in GitHub Actions for frontend changes.
+Backend validation from `backend/`:
 
-### Integration smoke checklist
+```bash
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py test
+```
 
-1. Sign in with a valid Django administrator account.
-2. Verify invalid credentials and blank fields produce clear errors.
-3. Verify a protected route redirects unauthenticated users to login.
-4. Verify dashboard, devices, device details, faults, history, and notifications render backend responses.
-5. Verify empty API responses render empty states rather than fabricated records.
-6. Verify network/API failures render actionable error states.
-7. Verify device validation rejects invalid IP addresses and missing required fields.
-8. Verify fault acknowledgement/resolution and notification read actions update backend state.
-9. Verify the application remains usable at narrow/mobile widths.
-10. Run `npm run lint` and `npm run build` before deployment.
+## Phase 23 integration smoke checklist
+
+1. Start Redis.
+2. Start Django on `127.0.0.1:8000`.
+3. Start Celery worker.
+4. Start Celery Beat for background monitoring dispatch.
+5. Start the Vite frontend.
+6. Sign in with a valid Django administrator account.
+7. Register a test device with monitoring enabled.
+8. Open the device details page and verify monitoring configuration and current state.
+9. Verify the background worker creates monitoring records at the configured interval.
+10. Verify ICMP monitoring updates device status and persisted monitoring results.
+11. Trigger a controlled high-latency or unreachable condition and verify a `FaultEvent` is created.
+12. Verify the dashboard reflects the device result and active fault.
+13. Verify an in-application notification is created for the fault.
+14. Verify monitoring and fault history contain the generated records.
+15. Acknowledge and resolve the fault from the frontend.
+16. Verify the backend status and dashboard update after resolution.
+17. Restore the device condition and verify automatic fault recovery where applicable.
+18. Run the complete backend and frontend test/validation suites.
+
+For controlled automated API coverage, `backend/network/test_system_integration.py` verifies the administrator login → device registration → monitoring configuration → ICMP result → fault → notification → dashboard → history → acknowledgement/resolution → monitoring snapshot workflow without requiring a real network device.
