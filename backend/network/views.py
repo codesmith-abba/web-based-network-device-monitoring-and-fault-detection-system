@@ -1,11 +1,14 @@
+from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from rest_framework.views import APIView
-from django.utils import timezone
 
+from .alerts.services import mark_notification_read
+from .devices.services import ensure_monitoring_configuration
+from .faults.services import acknowledge_fault, resolve_fault
 from .models import Device, FaultEvent, MonitoringConfiguration, MonitoringRecord, Notification
 from .serializers import (
     DeviceSerializer,
@@ -16,15 +19,13 @@ from .serializers import (
     MonitoringRecordSerializer,
     NotificationSerializer,
 )
-from .devices.services import ensure_monitoring_configuration
-from .faults.services import acknowledge_fault, resolve_fault
-from .alerts.services import mark_notification_read
 
 
 class DeviceViewSet(viewsets.ModelViewSet):
-    queryset = Device.objects.all()
+    queryset = Device.objects.select_related('monitoring_configuration').all()
     serializer_class = DeviceSerializer
-    http_method_names = ['get', 'post', 'patch', 'put', 'head', 'options']
+    permission_classes = [IsAdminUser]
+    http_method_names = ['get', 'post', 'patch', 'put', 'delete', 'head', 'options']
 
     @action(detail=True, methods=['patch'], url_path='monitoring')
     def monitoring(self, request, pk=None):
@@ -32,6 +33,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(device, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         device = serializer.save()
+        ensure_monitoring_configuration(device)
         return Response(serializer.data)
 
     @action(detail=True, methods=['get'], url_path='monitoring-snapshot')
@@ -52,13 +54,6 @@ class DeviceViewSet(viewsets.ModelViewSet):
 class MonitoringRecordViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = MonitoringRecord.objects.select_related('device').all()
     serializer_class = MonitoringRecordSerializer
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        device_id = self.request.query_params.get('deviceId')
-        if device_id:
-            queryset = queryset.filter(device_id=device_id)
-        return queryset
 
 
 class FaultViewSet(viewsets.ModelViewSet):
@@ -119,7 +114,7 @@ class DashboardView(APIView):
                 'id': str(device.id),
                 'name': device.name,
                 'address': device.ip_address,
-                'type': device.type,
+                'type': device.device_type,
                 'status': device.status,
                 'availability': availability,
                 'latencyMs': latest.latency_ms if latest else None,
