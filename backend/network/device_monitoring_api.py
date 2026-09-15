@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.db import models
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAdminUser
@@ -21,7 +22,10 @@ class DeviceMonitoringSnapshotView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request, pk):
-        device = Device.objects.select_related('monitoring_configuration').get(pk=pk)
+        device = get_object_or_404(
+            Device.objects.select_related('monitoring_configuration'),
+            pk=pk,
+        )
         configuration = device.monitoring_configuration
         latest = device.monitoring_records.first()
         history = device.monitoring_records.all()[:50]
@@ -58,12 +62,15 @@ class DeviceMonitoringSummaryView(APIView):
     permission_classes = [IsAdminUser]
 
     def get(self, request, pk):
-        device = Device.objects.get(pk=pk)
+        device = get_object_or_404(Device, pk=pk)
         hours_value = request.query_params.get('hours')
         try:
             hours = max(1, min(168, int(hours_value))) if hours_value else 24
         except (TypeError, ValueError):
-            hours = 24
+            return Response(
+                {'detail': 'hours must be an integer between 1 and 168.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         queryset = device.monitoring_records.filter(
             timestamp__gte=timezone.now() - timedelta(hours=hours)
@@ -88,7 +95,6 @@ class DeviceMonitoringSummaryView(APIView):
             'averageLatencyMs': round(average_latency, 3) if average_latency is not None else None,
             'averagePacketLossPercent': round(average_packet_loss, 3) if average_packet_loss is not None else None,
             'latest': MonitoringRecordSerializer(latest).data if latest else None,
-            # Backward-compatible aliases for the newer frontend contract.
             'records': total,
             'availability': reachable / total * 100 if total else None,
         })
@@ -98,7 +104,10 @@ class DeviceSNMPView(APIView):
     permission_classes = [IsAdminUser]
 
     def get_device(self, pk):
-        return Device.objects.select_related('monitoring_configuration').get(pk=pk)
+        return get_object_or_404(
+            Device.objects.select_related('monitoring_configuration'),
+            pk=pk,
+        )
 
     def get(self, request, pk):
         device = self.get_device(pk)
