@@ -17,7 +17,10 @@ from ..models import Device, MonitoringConfiguration, MonitoringRecord
 
 DEFAULT_PING_TIMEOUT_SECONDS = 2.0
 _LATENCY_PATTERN = re.compile(r"time[=<]([0-9]+(?:[.,][0-9]+)?)\s*ms", re.IGNORECASE)
-_PACKET_LOSS_PATTERN = re.compile(r"(?:packet )?loss[^0-9]*([0-9]+(?:[.,][0-9]+)?)\s*%", re.IGNORECASE)
+_PACKET_LOSS_PATTERN = re.compile(
+    r"(?:([0-9]+(?:[.,][0-9]+)?)\s*%\s*(?:packet\s+)?loss|(?:packet\s+)?loss[^0-9]*([0-9]+(?:[.,][0-9]+)?)\s*%)",
+    re.IGNORECASE,
+)
 
 
 class MonitoringError(Exception):
@@ -68,7 +71,8 @@ def _parse_packet_loss(output: str) -> float | None:
     match = _PACKET_LOSS_PATTERN.search(output)
     if match is None:
         return None
-    return float(match.group(1).replace(",", "."))
+    value = match.group(1) or match.group(2)
+    return float(value.replace(",", "."))
 
 
 def ping_ipv4(address: str, timeout_seconds: float = DEFAULT_PING_TIMEOUT_SECONDS) -> PingResult:
