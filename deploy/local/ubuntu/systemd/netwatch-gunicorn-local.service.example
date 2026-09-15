@@ -1,0 +1,17 @@
+[Unit]
+Description=NetWatch Django Gunicorn (Local Presentation)
+After=network.target redis-server.service
+Wants=redis-server.service
+
+[Service]
+Type=simple
+User=codesmithabba
+Group=codesmithabba
+WorkingDirectory=/home/codesmithabba/Desktop/web-based-network-device-monitoring-and-fault-detection-system/backend
+EnvironmentFile=/etc/netwatch/netwatch.env
+ExecStart=/home/codesmithabba/Desktop/web-based-network-device-monitoring-and-fault-detection-system/backend/env/bin/gunicorn backend.wsgi:application --bind 127.0.0.1:8000 --workers 2 --timeout 120 --access-logfile - --error-logfile -
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
