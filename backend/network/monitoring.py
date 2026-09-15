@@ -104,14 +104,9 @@ def ping_ipv4(address: str, timeout_seconds: float = DEFAULT_PING_TIMEOUT_SECOND
 
 
 def _get_configuration(device: Device) -> MonitoringConfiguration:
-    try:
-        configuration = device.monitoring_configuration
-    except MonitoringConfiguration.DoesNotExist as exc:
-        raise InvalidMonitoringConfiguration("Monitoring configuration does not exist for this device.") from exc
-
+    configuration, _ = MonitoringConfiguration.objects.get_or_create(device=device)
     if configuration.interval_seconds < 5:
         raise InvalidMonitoringConfiguration("Monitoring interval must be at least 5 seconds.")
-
     return configuration
 
 
@@ -119,8 +114,8 @@ def _get_configuration(device: Device) -> MonitoringConfiguration:
 def monitor_device(device: Device) -> MonitoringRecord:
     """Ping a device once and persist its reachability/latency result.
 
-    Expected network failures become an unreachable monitoring record instead
-    of an exception, so a failed device cannot crash the web application.
+    Expected network failures become an unreachable record instead of an
+    exception, so a failed device cannot crash the web application.
     Configuration errors are raised explicitly for the API to report safely.
     """
     if not device.monitoring_enabled:
