@@ -101,7 +101,15 @@ REST_FRAMEWORK = {
     ],
 }
 
+# Celery / Redis. Redis is both the broker and the default result backend.
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
 CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', CELERY_BROKER_URL)
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60
+CELERY_TASK_ACKS_LATE = True
+CELERY_BEAT_SCHEDULE = {
+    'dispatch-due-monitoring': {
+        'task': 'network.tasks.dispatch_due_monitoring_tasks',
+        'schedule': 5.0,
+    },
+}
