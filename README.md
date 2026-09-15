@@ -13,93 +13,128 @@ It is designed to reduce the difficulty of manually checking network devices and
 ## Key Features
 
 * **Device Management**
-
-  * Register and manage network devices
-  * Store device IP addresses, types, and monitoring configurations
-  * Enable or disable devices from monitoring
-
 * **Real-Time Monitoring**
-
-  * Device availability monitoring
-  * Ping/ICMP monitoring
-  * Latency measurement
-  * Packet-loss monitoring
-  * SNMP-based device metrics where supported
-
 * **Fault Detection**
-
-  * Device unreachable detection
-  * High latency detection
-  * Excessive packet-loss detection
-  * High CPU utilization detection
-  * High memory utilization detection
-  * Network interface failure detection
-  * Repeated connection failure detection
-
 * **Fault Management**
-
-  * Automatic fault event creation
-  * Fault severity classification
-  * Active and resolved fault tracking
-  * Fault history and timestamps
-
 * **Web Dashboard**
-
-  * Total monitored devices
-  * Online/offline device statistics
-  * Active fault summary
-  * Device health status
-  * Monitoring metrics and historical trends
-
 * **Notifications**
-
-  * Administrator alerts for detected faults
-  * Configurable notification mechanisms
-
 * **Historical Analytics**
-
-  * Device monitoring history
-  * Fault history
-  * Availability trends
-  * Performance statistics
 
 ## System Architecture
 
 ```text
-                         ┌─────────────────────────┐
-                         │      Web Dashboard      │
-                         │   React / TypeScript    │
-                         └────────────┬────────────┘
-                                      │
-                                  REST API
-                                      │
-                         ┌────────────▼────────────┐
-                         │      Backend Server     │
-                         │ Django + DRF / Python   │
-                         ├─────────────────────────┤
-                         │ Device Management       │
-                         │ Monitoring Engine        │
-                         │ Fault Detection Engine   │
-                         │ Alert Engine             │
-                         └────────────┬────────────┘
-                                      │
-                         ┌────────────┴────────────┐
-                         │                         │
-                       ICMP                      SNMP
-                         │                         │
-              ┌──────────▼──────────┐   ┌─────────▼─────────┐
-              │ Network Availability│   │ Device Metrics    │
-              │ & Connectivity       │   │ & Interfaces      │
-              └──────────┬──────────┘   └─────────┬─────────┘
-                         │                         │
-                         └────────────┬────────────┘
-                                      │
-                         ┌────────────▼────────────┐
-                         │    Network Devices      │
-                         │ Routers • Switches      │
-                         │ Servers • Access Points │
-                         └─────────────────────────┘
+Web Dashboard (React / TypeScript)
+              │
+           REST API
+              │
+Django + Django REST Framework
+              │
+     Network monitoring domain
+      ┌───────┼────────┐
+   Devices  Monitoring Faults
+                         │
+                   Notifications
 ```
+
+## Phase 9A — Django REST Backend Contracts
+
+Phase 9A establishes the first real backend contract. The backend is no longer only a Django project skeleton: it now contains a `network` Django application, DRF authentication, domain models, serializers, authenticated API views, URL routing, migrations, notification generation, and API tests.
+
+### Authentication
+
+Token authentication is used for the current REST contract.
+
+```text
+POST /api/auth/login/
+POST /api/auth/logout/
+GET  /api/auth/me/
+```
+
+Login accepts:
+
+```json
+{
+  "username": "admin",
+  "password": "..."
+}
+```
+
+A successful login returns a token and basic user information. Protected API requests use:
+
+```text
+Authorization: Token <token>
+```
+
+### Device API
+
+```text
+GET    /api/devices/
+POST   /api/devices/
+GET    /api/devices/<id>/
+PATCH  /api/devices/<id>/
+PUT    /api/devices/<id>/
+PATCH  /api/devices/<id>/monitoring/
+GET    /api/devices/<id>/monitoring-snapshot/
+```
+
+Device responses use the frontend contract naming (`ipAddress`, `monitoring`, `createdAt`, `updatedAt`) while Django model fields remain Pythonic.
+
+### Dashboard API
+
+```text
+GET /api/dashboard/
+```
+
+Returns:
+
+* device summary counts
+* device health information
+* active faults
+
+### Monitoring API
+
+```text
+GET /api/monitoring-records/
+GET /api/monitoring-records/<id>/
+GET /api/devices/<id>/monitoring-snapshot/
+```
+
+Historical monitoring is available through:
+
+```text
+GET /api/monitoring-history/
+```
+
+Supported query parameters include `deviceId`, `from`, and `to`.
+
+### Fault API
+
+```text
+GET    /api/faults/
+POST   /api/faults/
+GET    /api/faults/<id>/
+PATCH  /api/faults/<id>/
+PUT    /api/faults/<id>/
+POST   /api/faults/<id>/acknowledge/
+POST   /api/faults/<id>/resolve/
+PATCH  /api/faults/<id>/status/
+```
+
+Fault history is available through:
+
+```text
+GET /api/fault-history/
+```
+
+### Notification API
+
+```text
+GET  /api/notifications/
+GET  /api/notifications/<id>/
+POST /api/notifications/<id>/read/
+```
+
+Creating a fault automatically creates its notification record. Phase 9A does not claim email, SMS, or browser push delivery; those remain future integrations.
 
 ## Fault Detection Logic
 
@@ -125,29 +160,7 @@ monitoring      │
           Create fault event
                 │
                 ▼
-          Notify administrator
-```
-
-Other detection rules include:
-
-```text
-Packet Loss > Threshold
-        → HIGH_PACKET_LOSS
-
-Latency > Threshold
-        → HIGH_LATENCY
-
-CPU Usage > Threshold
-        → HIGH_CPU_USAGE
-
-Memory Usage > Threshold
-        → HIGH_MEMORY_USAGE
-
-Interface Status = DOWN
-        → INTERFACE_FAILURE
-
-Repeated Connection Failures
-        → CONNECTIVITY_FAILURE
+          Create notification
 ```
 
 ## Technology Stack
@@ -157,8 +170,8 @@ Repeated Connection Failures
 * Python
 * Django
 * Django REST Framework
-* Celery
-* Redis
+* Celery (planned monitoring worker integration)
+* Redis (planned monitoring worker integration)
 
 ### Network Monitoring
 
@@ -175,7 +188,8 @@ Repeated Connection Failures
 
 ### Database
 
-* PostgreSQL
+* SQLite for the current development backend foundation
+* PostgreSQL remains the planned production database
 
 ### Infrastructure
 
@@ -184,26 +198,23 @@ Repeated Connection Failures
 * Gunicorn / ASGI
 * Git & GitHub
 
-## Core Components
+## Backend Structure
 
 ```text
 backend/
-├── devices/
-├── monitoring/
-├── faults/
-├── alerts/
-├── analytics/
-└── api/
-
-frontend/
-├── dashboard/
-├── devices/
-├── faults/
-├── monitoring/
-└── components/
+├── backend/
+│   ├── settings.py
+│   └── urls.py
+├── network/
+│   ├── migrations/
+│   ├── models.py
+│   ├── serializers.py
+│   ├── views.py
+│   ├── urls.py
+│   ├── signals.py
+│   └── tests.py
+└── requirements.txt
 ```
-
-> The final project structure may evolve as the system is implemented.
 
 ## Monitoring Workflow
 
@@ -214,38 +225,22 @@ frontend/
 5. The fault detection engine evaluates the collected data.
 6. Detected faults are classified by severity.
 7. Fault events are recorded.
-8. Administrators are notified when configured conditions are triggered.
-9. The dashboard reflects the current device and network health.
+8. A notification record is created for the detected fault.
+9. Administrators can acknowledge or resolve faults.
 10. Historical monitoring and fault data can be analyzed later.
 
-## Project Objectives
+## Phase Status
 
-The project aims to:
-
-* Provide centralized monitoring of network devices.
-* Detect network and device failures automatically.
-* Reduce the time required to identify network problems.
-* Maintain historical records of network health.
-* Provide administrators with a web-based monitoring interface.
-* Improve visibility into network availability and performance.
-* Provide an extensible foundation for future intelligent network analysis.
-
-## Future Enhancements
-
-Potential future improvements include:
-
-* Machine-learning-based anomaly detection
-* Predictive fault detection
-* Network topology visualization
-* Automatic device discovery
-* Advanced SNMP monitoring
-* Email and messaging integrations
-* Role-based access control
-* Custom monitoring rules
-* Network performance reports
-* Automated incident escalation
-* Containerized deployment
-* Distributed monitoring agents
+* Phase 1 — Frontend Foundation & Application Shell — completed
+* Phase 2 — Frontend Authentication — completed
+* Phase 3 — Network Monitoring Dashboard — completed
+* Phase 4 — Network Device Management — completed
+* Phase 5 — Device Details and Monitoring — completed
+* Phase 6 — Fault Management — completed
+* Phase 7 — Historical Monitoring and Fault History — completed
+* Phase 8 — Notification Experience — completed
+* Phase 9A — Django REST Backend Contracts — implemented
+* Phase 9B — Frontend API Integration — next
 
 ## Project Status
 
