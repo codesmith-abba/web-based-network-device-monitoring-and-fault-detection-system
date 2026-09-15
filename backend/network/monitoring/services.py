@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from django.db import transaction
 from django.utils import timezone
 
+from ..faults.detection import evaluate_monitoring_record
 from ..models import Device, MonitoringConfiguration, MonitoringRecord
 
 
@@ -126,7 +127,7 @@ def _get_configuration(device: Device) -> MonitoringConfiguration:
 
 @transaction.atomic
 def monitor_device(device: Device) -> MonitoringRecord:
-    """Ping a device once and persist its reachability/latency result."""
+    """Ping a device, persist the result, and evaluate threshold faults."""
     if not device.monitoring_enabled:
         raise InvalidMonitoringConfiguration("Monitoring is disabled for this device.")
 
@@ -149,6 +150,7 @@ def monitor_device(device: Device) -> MonitoringRecord:
         device.status = new_status
         device.save(update_fields=["status", "updated_at"])
 
+    evaluate_monitoring_record(record)
     return record
 
 
@@ -164,10 +166,12 @@ def record_measurement(
     packet_loss_percent: float | None = None,
     timestamp=None,
 ) -> MonitoringRecord:
-    return MonitoringRecord.objects.create(
+    record = MonitoringRecord.objects.create(
         device=device,
         timestamp=timestamp or timezone.now(),
         reachable=reachable,
         latency_ms=latency_ms,
         packet_loss_percent=packet_loss_percent,
     )
+    evaluate_monitoring_record(record)
+    return record
