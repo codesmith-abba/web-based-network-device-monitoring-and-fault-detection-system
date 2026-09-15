@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from .faults.detection import FaultThresholds, evaluate_monitoring_record, evaluate_snmp_metric
-from .models import Device, FaultEvent, MonitoringRecord, SNMPMetric
+from .models import Device, FaultEvent, MonitoringRecord, Notification, SNMPMetric
 from .monitoring import PingResult, monitor_device
 
 
@@ -26,7 +26,7 @@ class FaultDetectionTests(TestCase):
             packet_loss_percent=packet_loss,
         )
 
-    def test_unreachable_device_creates_critical_fault(self):
+    def test_unreachable_device_creates_critical_fault_and_notification(self):
         record = self.record(reachable=False, latency=None, packet_loss=100.0)
 
         faults = evaluate_monitoring_record(record)
@@ -35,8 +35,12 @@ class FaultDetectionTests(TestCase):
         self.assertEqual(faults[0].fault_type, FaultEvent.FaultType.DEVICE_UNREACHABLE)
         self.assertEqual(faults[0].severity, FaultEvent.Severity.CRITICAL)
         self.assertEqual(faults[0].status, FaultEvent.Status.ACTIVE)
+        notification = Notification.objects.get(fault=faults[0])
+        self.assertEqual(notification.status, Notification.Status.UNREAD)
+        self.assertEqual(notification.fault.device_id, self.device.id)
+        self.assertEqual(notification.created_at, notification.fault.notification.created_at)
 
-    def test_high_latency_creates_fault_with_severity(self):
+    def test_high_latency_creates_fault_with_severity_and_notification(self):
         record = self.record(latency=600.0)
 
         faults = evaluate_monitoring_record(record)
@@ -44,8 +48,9 @@ class FaultDetectionTests(TestCase):
         self.assertEqual(len(faults), 1)
         self.assertEqual(faults[0].fault_type, FaultEvent.FaultType.HIGH_LATENCY)
         self.assertEqual(faults[0].severity, FaultEvent.Severity.HIGH)
+        self.assertTrue(Notification.objects.filter(fault=faults[0]).exists())
 
-    def test_medium_packet_loss_creates_medium_fault(self):
+    def test_medium_packet_loss_does_not_create_notification(self):
         record = self.record(packet_loss=25.0)
 
         faults = evaluate_monitoring_record(record)
@@ -53,6 +58,7 @@ class FaultDetectionTests(TestCase):
         self.assertEqual(len(faults), 1)
         self.assertEqual(faults[0].fault_type, FaultEvent.FaultType.HIGH_PACKET_LOSS)
         self.assertEqual(faults[0].severity, FaultEvent.Severity.MEDIUM)
+        self.assertFalse(Notification.objects.filter(fault=faults[0]).exists())
 
     def test_custom_thresholds_are_supported(self):
         record = self.record(latency=150.0)
@@ -79,6 +85,7 @@ class FaultDetectionTests(TestCase):
             ).count(),
             1,
         )
+        self.assertEqual(Notification.objects.filter(fault=first_fault).count(), 1)
 
     def test_recovered_condition_resolves_active_fault(self):
         bad = self.record(latency=600.0)
@@ -104,6 +111,10 @@ class FaultDetectionTests(TestCase):
             device=self.device,
             fault_type=FaultEvent.FaultType.DEVICE_UNREACHABLE,
             status=FaultEvent.Status.ACTIVE,
+        ).exists())
+        self.assertTrue(Notification.objects.filter(
+            fault__device=self.device,
+            fault__fault_type=FaultEvent.FaultType.DEVICE_UNREACHABLE,
         ).exists())
 
     def test_cpu_and_memory_resource_faults_are_supported(self):
@@ -132,6 +143,8 @@ class FaultDetectionTests(TestCase):
         self.assertEqual(cpu_fault.severity, FaultEvent.Severity.CRITICAL)
         self.assertEqual(memory_fault.fault_type, FaultEvent.FaultType.HIGH_MEMORY_USAGE)
         self.assertEqual(memory_fault.severity, FaultEvent.Severity.HIGH)
+        self.assertTrue(Notification.objects.filter(fault=cpu_fault).exists())
+        self.assertTrue(Notification.objects.filter(fault=memory_fault).exists())
 
     def test_normal_resource_metric_resolves_existing_fault(self):
         high = SNMPMetric.objects.create(
