@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -6,8 +7,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
 from .models import Device, MonitoringRecord
-from .monitoring import PingResult
-from unittest.mock import patch
+from .monitoring import PingResult, ping_ipv4
 
 
 User = get_user_model()
@@ -61,6 +61,21 @@ class MonitoringRecordTests(APITestCase):
         self.assertEqual(response.data['packetLossPercent'], 75.0)
         self.device.refresh_from_db()
         self.assertEqual(self.device.status, Device.Status.OFFLINE)
+
+    @patch('network.monitoring.subprocess.run')
+    def test_ping_ipv4_parses_supported_packet_loss_output(self, mock_run):
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = (
+            '64 bytes from 10.0.0.20: time=8.10 ms\n'
+            '4 packets transmitted, 3 received, 25% packet loss\n'
+        )
+        mock_run.return_value.stderr = ''
+
+        result = ping_ipv4('10.0.0.20')
+
+        self.assertTrue(result.reachable)
+        self.assertEqual(result.latency_ms, 8.10)
+        self.assertEqual(result.packet_loss_percent, 25.0)
 
     def test_monitoring_summary_reports_latest_and_aggregates(self):
         now = timezone.now()
