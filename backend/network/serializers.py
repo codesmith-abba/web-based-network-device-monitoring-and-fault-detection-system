@@ -35,7 +35,6 @@ class MonitoringConfigurationSerializer(serializers.ModelSerializer):
 
 class MonitoringRecordSerializer(serializers.ModelSerializer):
     deviceId = serializers.UUIDField(source='device_id', read_only=True)
-    timestamp = serializers.DateTimeField()
     latencyMs = serializers.FloatField(source='latency_ms', allow_null=True)
     packetLossPercent = serializers.FloatField(source='packet_loss_percent', allow_null=True)
 
@@ -47,12 +46,13 @@ class MonitoringRecordSerializer(serializers.ModelSerializer):
 
 class HistoricalMonitoringRecordSerializer(MonitoringRecordSerializer):
     deviceName = serializers.CharField(source='device.name', read_only=True)
-    
+
     class Meta(MonitoringRecordSerializer.Meta):
         fields = MonitoringRecordSerializer.Meta.fields + ['deviceName']
 
 
 class FaultSerializer(serializers.ModelSerializer):
+    device = serializers.PrimaryKeyRelatedField(queryset=Device.objects.all(), write_only=True)
     deviceId = serializers.UUIDField(source='device_id', read_only=True)
     deviceName = serializers.CharField(source='device.name', read_only=True)
     faultType = serializers.CharField(source='fault_type')
@@ -62,7 +62,7 @@ class FaultSerializer(serializers.ModelSerializer):
     class Meta:
         model = FaultEvent
         fields = [
-            'id', 'deviceId', 'deviceName', 'faultType', 'severity',
+            'id', 'device', 'deviceId', 'deviceName', 'faultType', 'severity',
             'detectedAt', 'status', 'description', 'resolvedAt',
         ]
         read_only_fields = ['id', 'deviceId', 'deviceName', 'resolvedAt']
