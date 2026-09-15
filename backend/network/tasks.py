@@ -113,12 +113,10 @@ def monitor_device_task(self, device_id: str) -> dict:
 
 
 @shared_task
-
 def dispatch_due_monitoring_tasks() -> dict:
     """Dispatch monitoring tasks for enabled devices whose interval elapsed."""
     now = timezone.now()
     dispatched = 0
-    skipped = 0
 
     devices = Device.objects.filter(monitoring_enabled=True).select_related("monitoring_configuration")
     for device in devices.iterator():
@@ -127,5 +125,5 @@ def dispatch_due_monitoring_tasks() -> dict:
         monitor_device_task.delay(str(device.id))
         dispatched += 1
 
-    logger.info("Dispatched %s due monitoring tasks; %s devices were not due", dispatched, skipped)
+    logger.info("Dispatched %s due monitoring tasks", dispatched)
     return {"dispatched": dispatched}
