@@ -1,6 +1,7 @@
 import uuid
 
 from django.db import models
+from django.db.models import Q
 
 
 class Device(models.Model):
@@ -122,6 +123,13 @@ class FaultEvent(models.Model):
         indexes = [
             models.Index(fields=['device', '-detected_at']),
             models.Index(fields=['status', '-detected_at']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['device', 'fault_type'],
+                condition=Q(status__in=['active', 'acknowledged']),
+                name='uniq_active_fault_type',
+            ),
         ]
 
 
