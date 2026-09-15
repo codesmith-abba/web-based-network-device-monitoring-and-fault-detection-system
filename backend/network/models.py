@@ -20,7 +20,7 @@ class Device(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=120)
     ip_address = models.GenericIPAddressField(protocol='IPv4')
-    type = models.CharField(max_length=20, choices=DeviceType.choices)
+    device_type = models.CharField(max_length=20, choices=DeviceType.choices)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.UNKNOWN)
     monitoring_enabled = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
