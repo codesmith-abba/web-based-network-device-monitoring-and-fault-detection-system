@@ -46,4 +46,5 @@ export class MonitoringServiceError extends Error {
 
 export interface DeviceMonitoringService {
   getSnapshot: (deviceId: string) => Promise<DeviceMonitoringSnapshot>
+  runCheck: (deviceId: string) => Promise<MonitoringRecord>
 }
