@@ -36,7 +36,7 @@ backend/
 └── network/
     ├── api/                 # API boundary and health endpoint
     ├── devices/             # device-domain services
-    ├── monitoring/          # monitoring-domain services
+    ├── monitoring.py        # ICMP monitoring engine
     ├── faults/              # fault-domain services
     ├── alerts/              # notification-domain services
     ├── migrations/
@@ -110,8 +110,6 @@ PostgreSQL remains a future production database option.
 
 Celery and Redis are established as the background-processing foundation. The Celery application is configured through Django settings and uses Redis as its default broker/backend.
 
-This phase does **not** claim that live ICMP/SNMP monitoring workers are already running. Actual periodic monitoring, network probing, fault detection, and retry scheduling belong to the monitoring-worker implementation phase.
-
 ## Device Management Backend — Phase 13
 
 Phase 13 implements the backend device-management lifecycle against the documented Chapter 3 data requirements.
@@ -168,9 +166,45 @@ The API validates:
 
 IPv6 addresses are rejected because the current documented model is IPv4-based.
 
-### API documentation
+## Phase 14 — ICMP Monitoring Engine
 
-Detailed device-management API documentation is available in `docs/API.md`.
+Phase 14 implements the documented ICMP-based monitoring mechanism for reachability and latency.
+
+### Monitoring engine
+
+`network/monitoring.py` contains the ICMP execution and persistence logic independently of API views. It:
+
+* validates IPv4 targets
+* performs one bounded ICMP echo request
+* records `reachable`, `latency_ms`, `packet_loss_percent`, timestamp, and device
+* updates device status to `online` or `offline`
+* handles timeout, missing ping utility, and network errors as unreachable results
+* rejects disabled or invalid monitoring configuration safely
+* invokes the system `ping` command without a shell
+
+### Run a monitoring check
+
+```text
+POST /api/devices/<id>/monitor/
+```
+
+A successful monitoring operation creates a `MonitoringRecord` and returns it through the API. An unreachable device is a valid monitoring result and does not produce a server error.
+
+### Monitoring result APIs
+
+```text
+GET /api/monitoring-records/
+GET /api/monitoring-records/<id>/
+GET /api/monitoring-records/?deviceId=<id>
+GET /api/devices/<id>/monitoring-snapshot/
+GET /api/monitoring-history/
+```
+
+Periodic scheduling is intentionally separate from the ICMP engine. The engine can be called by a future Celery scheduler/worker without moving network logic into API views.
+
+## API documentation
+
+Detailed device-management and ICMP monitoring documentation is available in `docs/API.md`.
 
 ## Existing API Contract
 
@@ -194,6 +228,7 @@ PATCH  /api/devices/<id>/
 PUT    /api/devices/<id>/
 DELETE /api/devices/<id>/
 PATCH  /api/devices/<id>/monitoring/
+POST   /api/devices/<id>/monitor/
 GET    /api/devices/<id>/monitoring-snapshot/
 ```
 
@@ -268,15 +303,16 @@ Creating a fault automatically creates its notification record. Email, SMS, and 
 ## Monitoring Workflow
 
 1. Administrator registers a network device.
-2. The monitoring engine schedules periodic checks.
-3. The system performs connectivity and metric collection.
-4. Monitoring data is stored for analysis.
-5. The fault detection engine evaluates the collected data.
-6. Detected faults are classified by severity.
-7. Fault events are recorded.
-8. A notification record is created for the detected fault.
-9. Administrators can acknowledge or resolve faults.
-10. Historical monitoring and fault data can be analyzed later.
+2. The monitoring engine executes an ICMP reachability check.
+3. Reachability, latency, packet loss, timestamp, and device are stored.
+4. Device status is synchronized with the latest monitoring result.
+5. A future scheduler can invoke the same monitoring engine periodically.
+6. The fault detection engine evaluates collected data.
+7. Detected faults are classified by severity.
+8. Fault events are recorded.
+9. A notification record is created for detected faults.
+10. Administrators can acknowledge or resolve faults.
+11. Historical monitoring and fault data can be analyzed later.
 
 ## Phase Status
 
@@ -293,6 +329,7 @@ Creating a fault automatically creates its notification record. Email, SMS, and 
 * Phase 10 — Frontend Testing and Hardening — in progress
 * Phase 11 — Django Backend Foundation — implemented
 * Phase 13 — Device Management Backend — implemented
+* Phase 14 — ICMP Monitoring Engine — implemented
 
 ## Validation
 
@@ -305,7 +342,7 @@ python manage.py migrate
 python manage.py test
 ```
 
-Phase 13 adds device lifecycle, validation, administrator-access, monitoring-association, and delete-behavior coverage while preserving the existing API contract.
+Phase 14 adds ICMP execution, timeout/network-failure handling, monitoring persistence, device-status synchronization, administrator-only monitoring execution, API exposure, and monitoring-engine test coverage.
 
 ## Academic Project
 
