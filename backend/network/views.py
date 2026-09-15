@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -20,7 +20,7 @@ from .serializers import (
     NotificationSerializer,
     SNMPMetricSerializer,
 )
-from .snmp.services import poll_device_snmp
+from .snmp.services import collect_snmp_metrics
 
 
 class DeviceViewSet(viewsets.ModelViewSet):
@@ -90,11 +90,20 @@ class DeviceViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='snmp/poll')
     def snmp_poll(self, request, pk=None):
         device = self.get_object()
-        try:
-            metrics = poll_device_snmp(device)
-        except Exception as exc:
-            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(SNMPMetricSerializer(metrics, many=True).data)
+        result = collect_snmp_metrics(device)
+        return Response({
+            'status': result.status,
+            'metrics': [
+                {
+                    'metric': metric.metric,
+                    'oid': metric.oid,
+                    'value': metric.value,
+                    'valueType': metric.value_type,
+                }
+                for metric in result.metrics
+            ],
+            'errors': list(result.errors),
+        })
 
 
 class MonitoringRecordViewSet(viewsets.ReadOnlyModelViewSet):
