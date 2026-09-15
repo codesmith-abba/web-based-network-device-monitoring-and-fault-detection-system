@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from ..alerts.services import create_fault_notification
 from ..models import Device, FaultEvent, MonitoringRecord, SNMPMetric
 
 
@@ -55,23 +56,25 @@ def _create_or_update_fault(device: Device, evaluation: FaultEvaluation, detecte
             updates.append('description')
         if updates:
             existing.save(update_fields=updates)
-        return existing
+        fault = existing
+    else:
+        try:
+            with transaction.atomic():
+                fault = FaultEvent.objects.create(
+                    device=device,
+                    fault_type=evaluation.fault_type,
+                    severity=evaluation.severity,
+                    detected_at=detected_at,
+                    status=FaultEvent.Status.ACTIVE,
+                    description=evaluation.description,
+                )
+        except IntegrityError:
+            fault = _active_fault(device, evaluation.fault_type)
+            if fault is None:
+                raise
 
-    try:
-        with transaction.atomic():
-            return FaultEvent.objects.create(
-                device=device,
-                fault_type=evaluation.fault_type,
-                severity=evaluation.severity,
-                detected_at=detected_at,
-                status=FaultEvent.Status.ACTIVE,
-                description=evaluation.description,
-            )
-    except IntegrityError:
-        existing = _active_fault(device, evaluation.fault_type)
-        if existing is None:
-            raise
-        return existing
+    create_fault_notification(fault)
+    return fault
 
 
 def _resolve_fault(device: Device, fault_type: str) -> int:
