@@ -29,6 +29,12 @@ class Device(models.Model):
     class Meta:
         ordering = ['name', 'created_at']
 
+    def save(self, *args, **kwargs):
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new:
+            MonitoringConfiguration.objects.get_or_create(device=self)
+
     def __str__(self):
         return f'{self.name} ({self.ip_address})'
 
