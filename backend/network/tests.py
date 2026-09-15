@@ -345,7 +345,6 @@ class MonitoringEngineTests(APITestCase):
             ip_address='10.0.0.1',
             device_type=Device.DeviceType.ROUTER,
         )
-        MonitoringConfiguration.objects.create(device=self.device, interval_seconds=60)
 
     @patch('network.monitoring.subprocess.run')
     def test_ping_ipv4_parses_latency(self, mock_run):
