@@ -44,8 +44,7 @@ def _apply_date_range(queryset, request, field):
     if effective_end - effective_start > timedelta(days=MAX_RANGE_DAYS):
         raise ValueError(f'Date ranges cannot exceed {MAX_RANGE_DAYS} days.')
 
-    if start:
-        queryset = queryset.filter(**{f'{field}__gte': start})
+    queryset = queryset.filter(**{f'{field}__gte': effective_start})
     if end:
         queryset = queryset.filter(**{f'{field}__lte': end})
     return queryset
