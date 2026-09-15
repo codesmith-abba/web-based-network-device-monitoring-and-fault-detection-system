@@ -112,3 +112,14 @@ class NetworkApiTests(APITestCase):
         response = self.client.get('/api/auth/me/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['username'], 'admin')
+
+
+class BackendFoundationTests(APITestCase):
+    def test_health_check_is_public_and_reports_database(self):
+        response = self.client.get('/api/health/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {'status': 'ok', 'database': 'ok'})
+
+    def test_health_check_rejects_non_get_requests(self):
+        response = self.client.post('/api/health/', {}, format='json')
+        self.assertEqual(response.status_code, 405)
