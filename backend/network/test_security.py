@@ -4,6 +4,7 @@ from unittest.mock import patch
 import redis
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -18,6 +19,7 @@ User = get_user_model()
 
 class AuthenticationSecurityTests(APITestCase):
     def setUp(self):
+        cache.clear()
         self.staff = User.objects.create_user(
             username='security-admin',
             email='security-admin@example.com',
