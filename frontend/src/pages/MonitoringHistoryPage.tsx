@@ -38,7 +38,22 @@ export function MonitoringHistoryPage() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { void load() }, [])
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      setError('')
+      try {
+        const [deviceList, result] = await Promise.all([getDeviceService().list(), getMonitoringHistoryService().list()])
+        if (!cancelled) { setDevices(deviceList); setRecords(result.records) }
+      } catch (reason: unknown) {
+        if (!cancelled) setError(reason instanceof HistoryServiceError ? reason.message : 'Unable to load monitoring history.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void run()
+    return () => { cancelled = true }
+  }, [])
 
   const filtered = useMemo(() => records.filter((record) => {
     const timestamp = new Date(record.timestamp).getTime()
