@@ -1,0 +1,17 @@
+[Unit]
+Description=NetWatch Celery Worker (Local Presentation)
+After=network.target redis-server.service
+Wants=redis-server.service
+
+[Service]
+Type=simple
+User=codesmithabba
+Group=codesmithabba
+WorkingDirectory=/home/codesmithabba/Desktop/web-based-network-device-monitoring-and-fault-detection-system/backend
+EnvironmentFile=/etc/netwatch/netwatch.env
+ExecStart=/home/codesmithabba/Desktop/web-based-network-device-monitoring-and-fault-detection-system/backend/env/bin/celery -A backend worker --loglevel=INFO --concurrency=2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
