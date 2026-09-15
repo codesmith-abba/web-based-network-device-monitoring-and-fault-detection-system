@@ -125,7 +125,7 @@ class NetworkApiTests(APITestCase):
         self.assertEqual(response.data['latest']['latencyMs'], 12.5)
         self.assertIn('configuration', response.data)
 
-    @patch('network.monitoring.ping_ipv4')
+    @patch('network.monitoring.services.ping_ipv4')
     def test_monitor_endpoint_records_reachable_device_and_latency(self, mock_ping):
         mock_ping.return_value = PingResult(True, 8.4, 0.0)
         response = self.client.post(f'/api/devices/{self.device.id}/monitor/', {}, format='json')
@@ -139,7 +139,7 @@ class NetworkApiTests(APITestCase):
         self.device.refresh_from_db()
         self.assertEqual(self.device.status, Device.Status.ONLINE)
 
-    @patch('network.monitoring.ping_ipv4')
+    @patch('network.monitoring.services.ping_ipv4')
     def test_monitor_endpoint_records_unreachable_device_without_crashing(self, mock_ping):
         mock_ping.return_value = PingResult(False, None, 100.0, 'ICMP request timed out.')
         response = self.client.post(f'/api/devices/{self.device.id}/monitor/', {}, format='json')
@@ -152,7 +152,7 @@ class NetworkApiTests(APITestCase):
         self.device.refresh_from_db()
         self.assertEqual(self.device.status, Device.Status.OFFLINE)
 
-    @patch('network.monitoring.ping_ipv4')
+    @patch('network.monitoring.services.ping_ipv4')
     def test_monitor_endpoint_handles_system_ping_failure(self, mock_ping):
         mock_ping.return_value = PingResult(False, None, 100.0, 'The system ping utility is not available.')
         response = self.client.post(f'/api/devices/{self.device.id}/monitor/', {}, format='json')
@@ -196,20 +196,6 @@ class NetworkApiTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {token.key}')
         response = self.client.post(f'/api/devices/{self.device.id}/monitor/', {}, format='json')
         self.assertEqual(response.status_code, 403)
-
-    def test_monitoring_snapshot_returns_latest_and_history(self):
-        MonitoringRecord.objects.create(
-            device=self.device,
-            timestamp=timezone.now() - timedelta(minutes=1),
-            reachable=True,
-            latency_ms=12.5,
-            packet_loss_percent=0,
-        )
-        response = self.client.get(f'/api/devices/{self.device.id}/monitoring-snapshot/')
-        self.assertEqual(response.status_code, 200)
-        self.assertIsNotNone(response.data['latest'])
-        self.assertEqual(response.data['latest']['latencyMs'], 12.5)
-        self.assertIn('configuration', response.data)
 
     def test_monitoring_endpoint_preserves_configuration_association(self):
         response = self.client.patch(
@@ -346,7 +332,7 @@ class MonitoringEngineTests(APITestCase):
             device_type=Device.DeviceType.ROUTER,
         )
 
-    @patch('network.monitoring.subprocess.run')
+    @patch('network.monitoring.services.subprocess.run')
     def test_ping_ipv4_parses_latency(self, mock_run):
         from .monitoring import ping_ipv4
 
@@ -360,7 +346,7 @@ class MonitoringEngineTests(APITestCase):
         mock_run.assert_called_once()
         self.assertFalse(mock_run.call_args.kwargs.get('shell', False))
 
-    @patch('network.monitoring.subprocess.run', side_effect=__import__('subprocess').TimeoutExpired(cmd=['ping'], timeout=2))
+    @patch('network.monitoring.services.subprocess.run', side_effect=__import__('subprocess').TimeoutExpired(cmd=['ping'], timeout=2))
     def test_ping_ipv4_handles_timeout(self, mock_run):
         from .monitoring import ping_ipv4
 
@@ -376,7 +362,7 @@ class MonitoringEngineTests(APITestCase):
         with self.assertRaises(InvalidMonitoringConfiguration):
             ping_ipv4('not-an-ip')
 
-    @patch('network.monitoring.ping_ipv4')
+    @patch('network.monitoring.services.ping_ipv4')
     def test_monitor_device_persists_result_and_status(self, mock_ping):
         mock_ping.return_value = PingResult(True, 2.75, 0.0)
         record = monitor_device(self.device)
@@ -386,7 +372,7 @@ class MonitoringEngineTests(APITestCase):
         self.device.refresh_from_db()
         self.assertEqual(self.device.status, Device.Status.ONLINE)
 
-    @patch('network.monitoring.ping_ipv4')
+    @patch('network.monitoring.services.ping_ipv4')
     def test_monitor_device_persists_network_failure_as_unreachable(self, mock_ping):
         mock_ping.return_value = PingResult(False, None, 100.0, 'Network error')
         record = monitor_device(self.device)
