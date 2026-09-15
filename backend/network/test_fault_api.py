@@ -1,7 +1,6 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
@@ -48,8 +47,8 @@ class FaultManagementAPITests(APITestCase):
     def test_fault_list_returns_frontend_contract(self):
         response = self.client.get('/api/faults/')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['count'], 2)
-        item = response.data['results'][0]
+        self.assertEqual(len(response.data), 2)
+        item = response.data[0]
         self.assertIn('deviceId', item)
         self.assertIn('deviceName', item)
         self.assertIn('faultType', item)
@@ -67,20 +66,20 @@ class FaultManagementAPITests(APITestCase):
     def test_fault_filters(self):
         response = self.client.get('/api/faults/', {'severity': 'high', 'type': 'HIGH_LATENCY'})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['count'], 1)
-        self.assertEqual(response.data['results'][0]['id'], str(self.active_fault.id))
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['id'], str(self.active_fault.id))
 
         response = self.client.get('/api/faults/', {'status': 'resolved', 'deviceId': str(self.device.id)})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['count'], 1)
-        self.assertEqual(response.data['results'][0]['id'], str(self.resolved_fault.id))
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['id'], str(self.resolved_fault.id))
 
     def test_fault_date_filters(self):
         start = (timezone.now() - timedelta(hours=2)).isoformat()
         response = self.client.get('/api/faults/', {'from': start})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['count'], 1)
-        self.assertEqual(response.data['results'][0]['id'], str(self.active_fault.id))
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['id'], str(self.active_fault.id))
 
     def test_fault_detail(self):
         response = self.client.get(f'/api/faults/{self.active_fault.id}/')
