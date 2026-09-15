@@ -45,16 +45,25 @@ def monitor_device_task(self, device_id: str) -> dict:
 
     The distributed Redis lock prevents overlapping monitoring runs for the
     same device when Celery workers or beat dispatches race with one another.
+    Redis lock failures are reported explicitly instead of being mistaken for
+    a device monitoring failure.
     """
-    lock = _redis_client().lock(
-        f"network-monitoring:device:{device_id}",
-        timeout=LOCK_TIMEOUT_SECONDS,
-        blocking=False,
-    )
-
-    if not lock.acquire():
-        logger.info("Skipping overlapping monitoring task for device %s", device_id)
-        return {"device_id": device_id, "status": "skipped", "reason": "already_running"}
+    try:
+        lock = _redis_client().lock(
+            f"network-monitoring:device:{device_id}",
+            timeout=LOCK_TIMEOUT_SECONDS,
+            blocking=False,
+        )
+        if not lock.acquire():
+            logger.info("Skipping overlapping monitoring task for device %s", device_id)
+            return {"device_id": device_id, "status": "skipped", "reason": "already_running"}
+    except redis.RedisError:
+        logger.exception("Redis lock unavailable for device %s", device_id)
+        return {
+            "device_id": device_id,
+            "status": "dependency_error",
+            "reason": "redis_unavailable",
+        }
 
     try:
         close_old_connections()
@@ -107,8 +116,8 @@ def monitor_device_task(self, device_id: str) -> dict:
     finally:
         try:
             lock.release()
-        except redis.exceptions.LockError:
-            logger.warning("Monitoring lock for device %s expired before release", device_id)
+        except redis.RedisError:
+            logger.warning("Monitoring lock for device %s could not be released", device_id)
         close_old_connections()
 
 
