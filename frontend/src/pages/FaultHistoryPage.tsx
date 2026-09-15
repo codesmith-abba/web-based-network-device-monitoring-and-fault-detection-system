@@ -24,7 +24,23 @@ export function FaultHistoryPage() {
   const [loading, setLoading] = useState(true); const [error, setError] = useState('')
 
   const load = async () => { setLoading(true); setError(''); try { const [deviceList, result] = await Promise.all([getDeviceService().list(), getFaultHistoryService().list()]); setDevices(deviceList); setFaults(result.faults) } catch (reason: unknown) { setError(reason instanceof HistoryServiceError ? reason.message : 'Unable to load fault history.') } finally { setLoading(false) } }
-  useEffect(() => { void load() }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      setError('')
+      try {
+        const [deviceList, result] = await Promise.all([getDeviceService().list(), getFaultHistoryService().list()])
+        if (!cancelled) { setDevices(deviceList); setFaults(result.faults) }
+      } catch (reason: unknown) {
+        if (!cancelled) setError(reason instanceof HistoryServiceError ? reason.message : 'Unable to load fault history.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void run()
+    return () => { cancelled = true }
+  }, [])
 
   const filtered = useMemo(() => faults.filter((fault) => { const timestamp = new Date(fault.detectedAt).getTime(); const afterFrom = !from || timestamp >= new Date(from).getTime(); const beforeTo = !to || timestamp <= new Date(to).getTime(); return (deviceId === 'all' || fault.deviceId === deviceId) && (severity === 'all' || fault.severity === severity) && (status === 'all' || fault.status === status) && (faultType === 'all' || fault.faultType === faultType) && afterFrom && beforeTo }), [faults, deviceId, severity, status, faultType, from, to])
 
