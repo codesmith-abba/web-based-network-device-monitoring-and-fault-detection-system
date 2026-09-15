@@ -7,9 +7,19 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RenameField(
-            model_name='device',
-            old_name='type',
-            new_name='device_type',
+        migrations.SeparateDatabaseAndState(
+            database_operations=[
+                migrations.RunSQL(
+                    sql='ALTER TABLE network_device RENAME COLUMN "type" TO "device_type"',
+                    reverse_sql='ALTER TABLE network_device RENAME COLUMN "device_type" TO "type"',
+                ),
+            ],
+            state_operations=[
+                migrations.RenameField(
+                    model_name='device',
+                    old_name='type',
+                    new_name='device_type',
+                ),
+            ],
         ),
     ]
