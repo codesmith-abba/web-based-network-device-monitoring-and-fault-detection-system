@@ -123,6 +123,9 @@ class FaultEvent(models.Model):
         indexes = [
             models.Index(fields=['device', '-detected_at']),
             models.Index(fields=['status', '-detected_at']),
+            models.Index(fields=['device', 'status', '-detected_at'], name='fault_device_status_time_idx'),
+            models.Index(fields=['device', 'fault_type', '-detected_at'], name='fault_device_type_time_idx'),
+            models.Index(fields=['severity', '-detected_at'], name='fault_severity_time_idx'),
         ]
         constraints = [
             models.UniqueConstraint(
