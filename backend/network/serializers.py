@@ -8,7 +8,8 @@ User = get_user_model()
 
 
 class DeviceSerializer(serializers.ModelSerializer):
-    ipAddress = serializers.IPAddressField(source='ip_address')
+    ipAddress = serializers.IPAddressField(source='ip_address', protocol='IPv4')
+    type = serializers.ChoiceField(source='device_type', choices=Device.DeviceType.choices)
     monitoring = serializers.BooleanField(source='monitoring_enabled')
     createdAt = serializers.DateTimeField(source='created_at', read_only=True)
     updatedAt = serializers.DateTimeField(source='updated_at', read_only=True)
@@ -17,6 +18,12 @@ class DeviceSerializer(serializers.ModelSerializer):
         model = Device
         fields = ['id', 'name', 'ipAddress', 'type', 'status', 'monitoring', 'createdAt', 'updatedAt']
         read_only_fields = ['id', 'status', 'createdAt', 'updatedAt']
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Device name is required.')
+        return value
 
     def create(self, validated_data):
         device = super().create(validated_data)
@@ -34,6 +41,11 @@ class MonitoringConfigurationSerializer(serializers.ModelSerializer):
     class Meta:
         model = MonitoringConfiguration
         fields = ['enabled', 'intervalSeconds', 'snmpEnabled', 'snmpVersion', 'availableMetrics']
+
+    def validate_intervalSeconds(self, value):
+        if value is not None and value < 5:
+            raise serializers.ValidationError('Monitoring interval must be at least 5 seconds.')
+        return value
 
 
 class MonitoringRecordSerializer(serializers.ModelSerializer):
