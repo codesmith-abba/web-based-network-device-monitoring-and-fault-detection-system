@@ -1,46 +1,22 @@
-import { getDeviceService } from '../devices/service'
-import { getFaultService } from '../faults/service'
-import { getMonitoringService } from '../monitoring/service'
-import { HistoryServiceError, type FaultHistoryService, type HistoryScenario, type MonitoringHistoryService, type MonitoringHistoryResult, type FaultHistoryResult } from './types'
+import { apiRequest, ApiError } from '../api/client'
+import { HistoryServiceError, type FaultHistoryService, type MonitoringHistoryService, type MonitoringHistoryResult, type FaultHistoryResult } from './types'
 
-function scenario(): HistoryScenario {
-  const value = import.meta.env.VITE_HISTORY_SCENARIO
-  return value === 'empty' || value === 'partial' || value === 'error' || value === 'loading' ? value : 'populated'
+function handleError(error: unknown): never {
+  if (error instanceof ApiError && (error.status === 401 || error.status === 403)) throw new HistoryServiceError('Your session is no longer authorized. Please sign in again.')
+  throw new HistoryServiceError(error instanceof Error ? error.message : 'History data could not be loaded.')
 }
 
-const monitoringHistoryService: MonitoringHistoryService = {
+export const monitoringHistoryService: MonitoringHistoryService = {
   async list(): Promise<MonitoringHistoryResult> {
-    const currentScenario = scenario()
-    if (currentScenario === 'error') throw new HistoryServiceError('Historical monitoring data could not be loaded.')
-    if (currentScenario === 'loading') return new Promise<MonitoringHistoryResult>(() => undefined)
-
-    const devices = await getDeviceService().list()
-    const monitoredDevices = devices.filter((device) => device.monitoring === 'enabled')
-    const snapshots = await Promise.all(monitoredDevices.map((device) => getMonitoringService().getSnapshot(device.id)))
-    let records = snapshots.flatMap((snapshot) => snapshot.history.map((record) => ({ ...record, deviceName: snapshot.device.name })))
-    if (currentScenario === 'empty') records = []
-    if (currentScenario === 'partial') records = records.slice(0, 1)
-    return { records }
+    try { return await apiRequest<MonitoringHistoryResult>('/monitoring-history/') } catch (error) { return handleError(error) }
   },
 }
 
-const faultHistoryService: FaultHistoryService = {
+export const faultHistoryService: FaultHistoryService = {
   async list(): Promise<FaultHistoryResult> {
-    const currentScenario = scenario()
-    if (currentScenario === 'error') throw new HistoryServiceError('Fault history could not be loaded.')
-    if (currentScenario === 'loading') return new Promise<FaultHistoryResult>(() => undefined)
-    const result = await getFaultService().list()
-    const faults = currentScenario === 'empty' ? [] : currentScenario === 'partial' ? result.faults.slice(0, 1) : result.faults
-    return { faults }
+    try { return await apiRequest<FaultHistoryResult>('/fault-history/') } catch (error) { return handleError(error) }
   },
 }
 
-export function getMonitoringHistoryService(): MonitoringHistoryService {
-  if (import.meta.env.VITE_MONITORING_ADAPTER === 'mock') return monitoringHistoryService
-  return { async list() { throw new HistoryServiceError('Monitoring history is not connected yet. Configure the Django/DRF historical monitoring adapter when the backend contract is available.', 'HISTORY_NOT_CONFIGURED') } }
-}
-
-export function getFaultHistoryService(): FaultHistoryService {
-  if (import.meta.env.VITE_FAULTS_ADAPTER === 'mock') return faultHistoryService
-  return { async list() { throw new HistoryServiceError('Fault history is not connected yet. Configure the Django/DRF historical fault adapter when the backend contract is available.', 'HISTORY_NOT_CONFIGURED') } }
-}
+export function getMonitoringHistoryService(): MonitoringHistoryService { return monitoringHistoryService }
+export function getFaultHistoryService(): FaultHistoryService { return faultHistoryService }
