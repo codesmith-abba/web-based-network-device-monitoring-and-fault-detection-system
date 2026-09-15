@@ -120,16 +120,17 @@ class NotificationSerializer(serializers.ModelSerializer):
     severity = serializers.CharField(source='fault.severity', read_only=True)
     detectedAt = serializers.DateTimeField(source='fault.detected_at', read_only=True)
     description = serializers.CharField(source='fault.description', read_only=True)
+    createdAt = serializers.DateTimeField(source='created_at', read_only=True)
 
     class Meta:
         model = Notification
         fields = [
             'id', 'faultId', 'deviceId', 'deviceName', 'faultType',
-            'severity', 'detectedAt', 'status', 'description',
+            'severity', 'detectedAt', 'createdAt', 'status', 'description',
         ]
         read_only_fields = [
             'id', 'faultId', 'deviceId', 'deviceName', 'faultType',
-            'severity', 'detectedAt', 'description',
+            'severity', 'detectedAt', 'createdAt', 'description',
         ]
 
 
