@@ -1,7 +1,10 @@
-from django.contrib.auth import authenticate
+from django.contrib.auth import authenticate, get_user_model
 from rest_framework import serializers
 
 from .models import Device, FaultEvent, MonitoringConfiguration, MonitoringRecord, Notification
+
+
+User = get_user_model()
 
 
 class DeviceSerializer(serializers.ModelSerializer):
@@ -96,10 +99,18 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, trim_whitespace=False)
 
     def validate(self, attrs):
-        user = authenticate(username=attrs['username'], password=attrs['password'])
-        if user is None:
+        identifier = attrs['username'].strip()
+        username = identifier
+
+        if '@' in identifier:
+            user = User.objects.filter(email__iexact=identifier).first()
+            if user is None:
+                raise serializers.ValidationError('Invalid username or password.')
+            username = user.get_username()
+
+        user = authenticate(username=username, password=attrs['password'])
+        if user is None or not user.is_active or not user.is_staff:
             raise serializers.ValidationError('Invalid username or password.')
-        if not user.is_active:
-            raise serializers.ValidationError('This account is inactive.')
+
         attrs['user'] = user
         return attrs
