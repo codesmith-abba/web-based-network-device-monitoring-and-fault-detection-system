@@ -51,7 +51,7 @@ class MonitoringRecordTests(APITestCase):
         self.assertEqual(MonitoringRecord.objects.filter(device=self.device).order_by('timestamp').first().latency_ms, 10.0)
         self.assertEqual(MonitoringRecord.objects.filter(device=self.device).first().packet_loss_percent, 100.0)
 
-    @patch('network.monitoring.ping_ipv4')
+    @patch('network.monitoring.services.ping_ipv4')
     def test_monitoring_records_store_packet_loss_and_update_status(self, mock_ping):
         mock_ping.return_value = PingResult(False, None, 75.0, 'Partial packet loss.')
 
@@ -62,7 +62,7 @@ class MonitoringRecordTests(APITestCase):
         self.device.refresh_from_db()
         self.assertEqual(self.device.status, Device.Status.OFFLINE)
 
-    @patch('network.monitoring.subprocess.run')
+    @patch('network.monitoring.services.subprocess.run')
     def test_ping_ipv4_parses_supported_packet_loss_output(self, mock_run):
         mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = (
