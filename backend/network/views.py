@@ -209,6 +209,20 @@ class FaultViewSet(mixins.CreateModelMixin, viewsets.ReadOnlyModelViewSet):
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Notification.objects.select_related('fault__device').all()
     serializer_class = NotificationSerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        status_value = self.request.query_params.get('status')
+        if status_value:
+            queryset = queryset.filter(status=status_value)
+        device_id = self.request.query_params.get('deviceId')
+        if device_id:
+            queryset = queryset.filter(fault__device_id=device_id)
+        severity = self.request.query_params.get('severity')
+        if severity:
+            queryset = queryset.filter(fault__severity=severity)
+        return queryset
 
     @action(detail=True, methods=['post'], url_path='read')
     def mark_read(self, request, pk=None):
