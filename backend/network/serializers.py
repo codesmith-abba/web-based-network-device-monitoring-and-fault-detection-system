@@ -25,11 +25,6 @@ class DeviceSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Device name is required.')
         return value
 
-    def create(self, validated_data):
-        device = super().create(validated_data)
-        MonitoringConfiguration.objects.get_or_create(device=device)
-        return device
-
 
 class MonitoringConfigurationSerializer(serializers.ModelSerializer):
     enabled = serializers.BooleanField(source='device.monitoring_enabled', read_only=True)
