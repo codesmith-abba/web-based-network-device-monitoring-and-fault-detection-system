@@ -1,389 +1,318 @@
 # Web-Based Network Device Monitoring and Fault Detection System
 
-A web-based network monitoring platform for continuously monitoring network devices, detecting faults, tracking network health, and providing administrators with real-time visibility into infrastructure status.
+A web-based administrator platform for registering network devices, performing ICMP monitoring, collecting selected SNMP metrics, detecting predefined faults, recording monitoring history, and presenting network health through a React dashboard.
 
-## System Architecture
+> **Release status:** Final academic-project release preparation (Phase 28). The implementation is documented according to the actual repository behavior and the requirements traced in `docs/PHASE_27_REQUIREMENTS_TRACEABILITY.md`.
 
-```text
-Web Dashboard (React / TypeScript)
-              │
-           REST API
-              │
-Django + Django REST Framework
-              │
-      Application/API boundary
-   ┌──────────┼───────────┐
- Devices   Monitoring   Faults
-                          │
-                    Alerts/Notifications
-              │
-       Domain service modules
-              │
- SQLite (development database)
-              │
- Celery ───── Redis (background processing foundation)
-```
+## Project Overview
 
-The backend uses one Django `network` application with explicit domain modules. This preserves the established frontend API contract while separating business operations from HTTP handling.
+The system centralizes network-device management and monitoring in a web application. An administrator can register devices, configure monitoring, inspect current health, review monitoring/fault history, receive in-application fault notifications, and acknowledge or resolve detected faults.
 
-## Backend Structure
+The backend performs the monitoring and fault-detection work. The frontend consumes the Django REST API and does not duplicate monitoring business logic.
 
-```text
-backend/
-├── backend/
-│   ├── settings.py          # environment, DRF, CORS, SQLite, Celery
-│   ├── urls.py              # project-level HTTP routing
-│   └── celery.py            # Celery application
-└── network/
-    ├── api/                 # health endpoint
-    ├── alerts/              # notification services
-    ├── devices/             # device-domain services
-    ├── faults/              # fault detection and lifecycle services
-    ├── monitoring/          # ICMP monitoring engine
-    ├── snmp/                # SNMP monitoring services
-    ├── migrations/
-    ├── historical_api.py    # historical monitoring/fault analytics APIs
-    ├── models.py            # persistence models
-    ├── serializers.py       # REST representation boundary
-    ├── tasks.py             # Celery monitoring tasks
-    ├── views.py             # REST controllers/viewsets
-    └── urls.py              # API routing
-```
+## Scope
 
-## Authentication
+Implemented:
 
-Protected API endpoints use Django REST Framework token authentication:
+- Administrator authentication and protected API access
+- Centralized device registration and management
+- IPv4 device validation
+- Monitoring configuration
+- Immediate and periodic ICMP monitoring
+- Latency and packet-loss recording
+- SNMP v1/v2c metric collection where configured
+- Deterministic fault detection and severity assignment
+- Fault lifecycle: active, acknowledged, resolved
+- In-application notifications
+- Monitoring and fault history
+- Dashboard health summaries
+- Celery/Redis background monitoring infrastructure
+- Production deployment configuration for Linux/Nginx/Gunicorn/SQLite/Redis
 
-```http
-Authorization: Token <token>
-```
+The project does **not** claim physical interoperability across every network vendor/model, automatic device reconfiguration, intrusion detection, ISP infrastructure monitoring, advanced predictive maintenance, full ML-based network prediction, or hardware-level physical diagnosis. SNMP validation is explicitly controlled/simulated in the academic validation suite.
 
-Device management, monitoring, historical analytics, fault management, and notifications require an authenticated staff user (`is_staff=True`).
-
-Authentication endpoints:
+## Architecture
 
 ```text
-POST /api/auth/login/
-POST /api/auth/logout/
-GET  /api/auth/me/
+                         Browser
+                            │
+                    React / TypeScript
+                            │
+                         /api
+                            │
+                          Nginx
+                            │
+                  Gunicorn → Django WSGI
+                            │
+              Django REST Framework / API
+                            │
+       ┌────────────────────┼────────────────────┐
+       │                    │                    │
+    Devices             Monitoring             Faults
+       │                    │                    │
+       │             ICMP / SNMP          Detection rules
+       │                    │                    │
+       └────────────────────┼────────────────────┘
+                            │
+                         SQLite
+                            │
+                     Celery worker
+                            │
+                          Redis
+                            ▲
+                      Celery Beat
 ```
 
-Unauthenticated protected requests return `401 Unauthorized`. Authenticated non-administrators return `403 Forbidden`.
+The backend is WSGI-based (`backend.wsgi:application`). Gunicorn is therefore used for deployment; an ASGI server is not required by the current implementation.
 
-The health endpoint is intentionally public:
+Detailed diagrams and model relationships are in:
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/DATABASE.md`](docs/DATABASE.md)
+- [`docs/DFD_UML.md`](docs/DFD_UML.md)
+
+## Technology Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React, TypeScript, Vite, Tailwind CSS v4, Recharts |
+| API | Django REST Framework |
+| Backend | Python, Django |
+| Monitoring | ICMP/Ping, PySNMP |
+| Background jobs | Celery, Celery Beat |
+| Broker/backend | Redis |
+| Database | SQLite |
+| Production web server | Nginx |
+| Application server | Gunicorn / Django WSGI |
+| Source control | Git / GitHub |
+
+## Repository Structure
+
+```text
+.
+├── backend/                 # Django project and network application
+├── frontend/                # React/Vite application
+├── deploy/                  # Nginx and systemd deployment examples
+├── docs/                    # API, architecture, database, validation and academic docs
+└── README.md
+```
+
+## Requirements
+
+Development requires:
+
+- Python 3.12-compatible environment
+- Node.js/npm
+- Redis
+- Git
+
+Production additionally requires Linux, Nginx, Gunicorn, Redis, and a configured HTTPS certificate before public traffic is enabled.
+
+## Backend Setup
+
+```bash
+cd backend
+python3 -m venv env
+source env/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+Set a real `DJANGO_SECRET_KEY` in the environment. Do not commit `.env` or production secrets.
+
+Initialize the database:
+
+```bash
+python manage.py migrate --noinput
+python manage.py createsuperuser
+python manage.py runserver
+```
+
+Django API: `http://127.0.0.1:8000/`
+
+Public health endpoint:
 
 ```text
 GET /api/health/
 ```
 
-## Device Management
+## Redis and Celery
 
-```text
-GET    /api/devices/
-POST   /api/devices/
-GET    /api/devices/<id>/
-PATCH  /api/devices/<id>/
-PUT    /api/devices/<id>/
-DELETE /api/devices/<id>/
-PATCH  /api/devices/<id>/monitoring/
-GET    /api/devices/<id>/monitoring-config/
-PATCH  /api/devices/<id>/monitoring-config/
-```
-
-Supported device types:
-
-* `router`
-* `switch`
-* `server`
-* `access-point`
-* `firewall`
-* `other`
-
-Devices use UUID identifiers and IPv4 addresses. Device registration automatically creates the associated `MonitoringConfiguration`.
-
-## Monitoring
-
-The ICMP monitoring engine validates IPv4 addresses, executes a bounded ping without a shell, stores the measurement, updates device status, and evaluates threshold faults.
-
-Run one immediate check:
-
-```text
-POST /api/devices/<id>/monitor/
-```
-
-Monitoring records contain:
-
-* timestamp
-* device
-* reachability
-* latency in milliseconds
-* packet loss percentage
-
-Monitoring history is immutable: each execution creates a new record.
-
-### Monitoring APIs
-
-```text
-GET /api/monitoring-records/
-GET /api/monitoring-records/?deviceId=<id>
-GET /api/devices/<id>/monitoring-snapshot/
-GET /api/devices/<id>/monitoring-summary/
-GET /api/monitoring-history/
-```
-
-See [`docs/API.md`](docs/API.md) for the established monitoring contract and [`docs/HISTORICAL_API.md`](docs/HISTORICAL_API.md) for historical analytics.
-
-## Automated Monitoring
-
-Celery and Redis provide asynchronous monitoring execution.
-
-The system uses:
-
-* `monitor_device_task` — monitors one device asynchronously.
-* `dispatch_due_monitoring_tasks` — finds enabled devices whose configured interval has elapsed.
-* Redis distributed locks — prevent overlapping monitoring runs for the same device.
-* Celery Beat — dispatches due monitoring checks every five seconds.
-
-Enabling monitoring through the API immediately queues the first asynchronous monitoring task.
-
-Typical local services:
+Start Redis locally:
 
 ```bash
 redis-server
+```
+
+From `backend/` with the virtual environment active:
+
+```bash
 celery -A backend worker -l info
 celery -A backend beat -l info
-python manage.py runserver
 ```
+
+Celery Beat dispatches due monitoring work every five seconds. The configured device interval determines whether a device is due for another check. Redis locks prevent overlapping monitoring runs for the same device.
+
+## Frontend Setup
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The Vite development server proxies `/api` to `http://127.0.0.1:8000`.
+
+For another API origin, set:
+
+```env
+VITE_API_BASE_URL=/api
+```
+
+Do not put secrets in Vite environment variables because `VITE_*` values are bundled into browser code.
+
+## Monitoring Configuration
+
+Every registered device automatically receives a `MonitoringConfiguration`.
+
+Configuration includes:
+
+- monitoring enabled/disabled
+- interval in seconds
+- SNMP enabled/disabled
+- SNMP version
+- SNMP community (stored server-side and not exposed by the configuration API)
+- SNMP port
+- SNMP timeout
+- selected metrics
+
+The current device model accepts IPv4 addresses only.
 
 ## Fault Detection
 
-The monitoring engine evaluates each monitoring record against deterministic thresholds for:
+The implemented deterministic rules cover:
 
-* device unreachable
-* high latency
-* high packet loss
+- device unreachable
+- high latency
+- high packet loss
+- high CPU usage from supported SNMP metrics
+- high memory usage from supported SNMP metrics
 
-SNMP metrics can additionally produce:
+The model also contains interface/connectivity fault types used by the domain model, but they are not represented as a claim of an independent automatic detection algorithm unless supported by the current monitoring path.
 
-* high CPU usage
-* high memory usage
-
-Active and acknowledged faults are unique per device/fault type. Recovery automatically resolves the corresponding monitoring fault condition.
-
-Fault lifecycle:
+Faults have `critical`, `high`, `medium`, or `low` severity and follow:
 
 ```text
 active → acknowledged → resolved
 active → resolved
 ```
 
-Fault APIs:
+## API Documentation
 
-```text
-GET    /api/faults/
-POST   /api/faults/
-GET    /api/faults/<id>/
-GET    /api/faults/active/
-POST   /api/faults/<id>/acknowledge/
-POST   /api/faults/<id>/resolve/
-PATCH  /api/faults/<id>/status/
+Start with [`docs/API.md`](docs/API.md) for device and monitoring endpoints.
+
+Additional API references:
+
+- [`docs/FAULT_API.md`](docs/FAULT_API.md)
+- [`docs/HISTORICAL_API.md`](docs/HISTORICAL_API.md)
+- [`docs/NOTIFICATIONS.md`](docs/NOTIFICATIONS.md)
+- [`docs/AUTOMATED_MONITORING.md`](docs/AUTOMATED_MONITORING.md)
+
+Authentication uses Django REST Framework token authentication:
+
+```http
+Authorization: Token <token>
 ```
 
-High and critical faults can create an unread notification record.
+Protected application endpoints require an authenticated staff administrator.
 
-## Historical Monitoring and Analytics — Phase 21
+## Testing and Validation
 
-Historical APIs are bounded and database-oriented so large monitoring histories are not unnecessarily loaded into application memory.
-
-### Monitoring history
-
-```text
-GET /api/monitoring-history/
-```
-
-Supported filters:
-
-```text
-?deviceId=<uuid>
-?from=<iso-datetime>
-?to=<iso-datetime>
-?reachable=true|false
-?limit=<1-500>
-```
-
-Database-side aggregation:
-
-```text
-?aggregation=minute
-?aggregation=hour
-?aggregation=day
-```
-
-Aggregated results provide record count, availability, average latency, and average packet loss.
-
-### Fault history
-
-```text
-GET /api/fault-history/
-```
-
-Supported filters:
-
-```text
-?deviceId=<uuid>
-?faultType=<type>
-?severity=<severity>
-?status=<status>
-?from=<iso-datetime>
-?to=<iso-datetime>
-?limit=<1-500>
-```
-
-Daily aggregation is available with:
-
-```text
-?aggregation=day
-```
-
-Historical queries enforce bounded date ranges and response sizes. Monitoring and fault tables have indexes supporting device/time, status/time, severity/time, and fault-type/time queries.
-
-Full response documentation is available in [`docs/HISTORICAL_API.md`](docs/HISTORICAL_API.md).
-
-## SNMP
-
-The backend supports SNMPv1 and SNMPv2c through PySNMP.
-
-Current supported metrics include:
-
-* `sysDescr`
-* `sysName`
-* `sysUpTime`
-* `ifNumber`
-
-SNMP failures are isolated from ICMP monitoring and are returned as monitoring outcomes rather than unhandled application exceptions.
-
-## Notifications
-
-```text
-GET  /api/notifications/
-GET  /api/notifications/<id>/
-POST /api/notifications/<id>/read/
-```
-
-Notification records are linked one-to-one with faults and can be filtered by device, severity, and notification status.
-
-## Security and Deployment Configuration
-
-The backend defaults to `DEBUG=False` and keeps development HTTP compatibility while exposing environment variables for production HTTPS hardening.
-
-Important environment variables:
-
-* `DJANGO_SECRET_KEY`
-* `DJANGO_DEBUG`
-* `DJANGO_ALLOWED_HOSTS`
-* `DJANGO_TIME_ZONE`
-* `SQLITE_DB_PATH`
-* `CORS_ALLOWED_ORIGINS`
-* `CSRF_TRUSTED_ORIGINS`
-* `DJANGO_SECURE_SSL_REDIRECT`
-* `DJANGO_SESSION_COOKIE_SECURE`
-* `DJANGO_CSRF_COOKIE_SECURE`
-* `DJANGO_SECURE_HSTS_SECONDS`
-* `CELERY_BROKER_URL`
-* `CELERY_RESULT_BACKEND`
-
-The development secret fallback is not suitable for deployment; production configuration must provide a real `DJANGO_SECRET_KEY`.
-
-## Validation
-
-From `backend/`:
+Backend:
 
 ```bash
+cd backend
 python manage.py check
 python manage.py makemigrations --check --dry-run
-python manage.py migrate --noinput
 python manage.py test
 ```
 
-For a clean database validation:
+Controlled network-monitoring validation:
 
 ```bash
-rm -f db.sqlite3
-python manage.py migrate --noinput
-python manage.py test
+python manage.py test network.test_monitoring_validation -v 2
 ```
 
-The GitHub Actions backend workflow performs Django checks, verifies migrations, creates a clean SQLite database, applies all migrations, and runs the complete test suite.
+Frontend:
 
-## Phase 22 — Backend Completion and Hardening
+```bash
+cd frontend
+npm run lint
+npm run build
+```
 
-Phase 22 audits and hardens the backend for complete frontend integration.
+Deployment configuration validation:
 
-Completed areas:
+```bash
+cd backend
+python manage.py check --deploy
+```
 
-* model relationships, constraints, indexes, and cascading behavior audited
-* serializers aligned with the frontend API contract
-* duplicate legacy history/monitoring controllers removed
-* monitoring snapshot/summary/SNMP APIs return proper `404` and validation responses
-* token authentication and administrator-only API access tested
-* ICMP monitoring workflow tested from API request through persistence and fault evaluation
-* fault creation, notification, acknowledgement, recovery, and resolution tested
-* Celery monitoring task and Redis lock behavior tested
-* API validation/error handling tested
-* secure Django defaults strengthened
-* clean-database migration validation added to CI
-* unused monitoring export removed
-* backend documentation updated
+`check --deploy` requires production environment values such as `DJANGO_SECRET_KEY`, allowed hosts, and HTTPS settings to be supplied. Local HTTP development may intentionally report HTTPS/HSTS warnings when those production values are disabled.
 
-## Technology Stack
+The final academic traceability matrix is in [`docs/PHASE_27_REQUIREMENTS_TRACEABILITY.md`](docs/PHASE_27_REQUIREMENTS_TRACEABILITY.md).
 
-### Backend
+## Deployment
 
-* Python
-* Django
-* Django REST Framework
-* Celery
-* Redis
+The documented deployment target is a Linux single-origin installation:
 
-### Network Monitoring
+```text
+Nginx
+ ├── React static files
+ ├── Django static/media files
+ └── /api/ and /admin/
+          │
+       Gunicorn
+          │
+      Django WSGI
+          │
+   SQLite + Celery
+          │
+        Redis
+```
 
-* ICMP / Ping
-* SNMP
-* PySNMP
+See [`deploy/README.md`](deploy/README.md) for the complete deployment procedure, systemd units, Nginx configuration, environment configuration, HTTPS requirements, backup requirements, and smoke tests.
 
-### Frontend
+SQLite is the current documented deployment database for this project. PostgreSQL is not part of the finalized deployment contract.
 
-* React
-* TypeScript
-* Tailwind CSS
-* Recharts
+## Screenshots and Demonstration
 
-### Database
+The repository does not embed generated UI screenshots because screenshots depend on the deployed/demo environment and are not required by the runtime implementation. For an academic demonstration, capture the running application showing:
 
-* SQLite for development
-* PostgreSQL planned for production
+1. Administrator login
+2. Dashboard
+3. Device registration/configuration
+4. Device monitoring details
+5. Active fault
+6. Fault acknowledgement/resolution
+7. Monitoring history
+8. Fault history
+9. Notifications
 
-### Infrastructure
+These screenshots should be taken from the final validated build rather than represented as static implementation claims in source documentation.
 
-* Linux
-* Nginx
-* Gunicorn / ASGI
-* Git & GitHub
+## Academic Documentation
 
-## Academic Project
+- [`docs/Chapter One- Network Device Monitoring and Fault Detection.docx`](docs/Chapter%20One-%20Network%20Device%20Monitoring%20and%20Fault%20Detection.docx)
+- [`docs/Chapter Three – System Analysis and Methodology.docx`](docs/Chapter%20Three%20%E2%80%93%20System%20Analysis%20and%20Methodology.docx)
+- [`docs/PHASE_27_REQUIREMENTS_TRACEABILITY.md`](docs/PHASE_27_REQUIREMENTS_TRACEABILITY.md)
 
-This system demonstrates the application of:
+## Release Documentation
 
-* Computer networking
-* Network management
-* Web application development
-* Database systems
-* Distributed/background processing
-* Fault detection
-* Network performance monitoring
+- [`docs/PHASE_28_FINAL_RELEASE.md`](docs/PHASE_28_FINAL_RELEASE.md)
+- [`RELEASE_NOTES.md`](RELEASE_NOTES.md)
 
 ## Author
 
-**Abdulmumin Abubakar**
-
+**Abdulmumin Abubakar**  
 AI Engineer | Software Engineer | Founder, Echowavs
