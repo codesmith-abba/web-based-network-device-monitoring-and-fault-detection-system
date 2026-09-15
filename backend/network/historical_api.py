@@ -34,10 +34,14 @@ def _parse_range(request, field_name):
 def _apply_date_range(queryset, request, field):
     start = _parse_range(request, 'from')
     end = _parse_range(request, 'to')
+    now = timezone.now()
 
     if start and end and start > end:
         raise ValueError('The from datetime must be earlier than or equal to the to datetime.')
-    if start and end and end - start > timedelta(days=MAX_RANGE_DAYS):
+
+    effective_end = end or now
+    effective_start = start or (effective_end - timedelta(days=MAX_RANGE_DAYS))
+    if effective_end - effective_start > timedelta(days=MAX_RANGE_DAYS):
         raise ValueError(f'Date ranges cannot exceed {MAX_RANGE_DAYS} days.')
 
     if start:
