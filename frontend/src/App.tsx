@@ -8,6 +8,7 @@ import { FaultHistoryPage } from './pages/FaultHistoryPage'
 import { FaultsPage } from './pages/FaultsPage'
 import { LoginPage } from './pages/LoginPage'
 import { MonitoringHistoryPage } from './pages/MonitoringHistoryPage'
+import { NotificationsPage } from './pages/NotificationsPage'
 
 function AppContent() {
   const path = window.location.pathname
@@ -21,9 +22,11 @@ function AppContent() {
         ? <MonitoringHistoryPage />
         : path === '/fault-history'
           ? <FaultHistoryPage />
-          : deviceDetailsMatch
-            ? <DeviceDetailsPage deviceId={decodeURIComponent(deviceDetailsMatch[1])} />
-            : <DashboardPage />
+          : path === '/notifications'
+            ? <NotificationsPage />
+            : deviceDetailsMatch
+              ? <DeviceDetailsPage deviceId={decodeURIComponent(deviceDetailsMatch[1])} />
+              : <DashboardPage />
   return <ProtectedRoute><AppShell>{page}</AppShell></ProtectedRoute>
 }
 
