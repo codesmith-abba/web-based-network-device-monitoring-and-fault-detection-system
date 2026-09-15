@@ -25,8 +25,6 @@ _SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 if _SECRET_KEY:
     SECRET_KEY = _SECRET_KEY
 elif DEBUG or 'test' in sys.argv:
-    # Explicit local debug/test processes may use an ephemeral key. Production
-    # processes must provide a stable secret through the environment.
     SECRET_KEY = get_random_secret_key()
 else:
     raise RuntimeError('DJANGO_SECRET_KEY must be configured when DEBUG is disabled.')
@@ -95,7 +93,11 @@ LANGUAGE_CODE = 'en-us'
 TIME_ZONE = os.getenv('DJANGO_TIME_ZONE', 'UTC')
 USE_I18N = True
 USE_TZ = True
-STATIC_URL = 'static/'
+
+STATIC_URL = '/static/'
+STATIC_ROOT = Path(os.getenv('DJANGO_STATIC_ROOT', str(BASE_DIR / 'staticfiles')))
+MEDIA_URL = '/media/'
+MEDIA_ROOT = Path(os.getenv('DJANGO_MEDIA_ROOT', str(BASE_DIR / 'media')))
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOWED_ORIGINS = env_list(
@@ -119,8 +121,6 @@ REST_FRAMEWORK = {
     },
 }
 
-# Security headers/cookies are configurable for HTTPS deployments. They stay
-# disabled by default so local HTTP development continues to work.
 SECURE_SSL_REDIRECT = env_bool('DJANGO_SECURE_SSL_REDIRECT', False)
 SESSION_COOKIE_SECURE = env_bool('DJANGO_SESSION_COOKIE_SECURE', not DEBUG)
 CSRF_COOKIE_SECURE = env_bool('DJANGO_CSRF_COOKIE_SECURE', not DEBUG)
@@ -130,7 +130,6 @@ SECURE_HSTS_PRELOAD = env_bool('DJANGO_SECURE_HSTS_PRELOAD', False)
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 
-# Celery / Redis. Redis is both the broker and the default result backend.
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
 CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', CELERY_BROKER_URL)
 CELERY_TASK_TRACK_STARTED = True
