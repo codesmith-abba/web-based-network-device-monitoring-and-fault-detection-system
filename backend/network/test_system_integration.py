@@ -32,10 +32,8 @@ class FullSystemIntegrationTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {response.data['token']}")
 
     def test_documented_monitoring_fault_history_notification_workflow(self):
-        # Administrator login.
         self.authenticate()
 
-        # Register a monitored device.
         response = self.client.post(
             '/api/devices/',
             {
@@ -49,7 +47,6 @@ class FullSystemIntegrationTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         device_id = response.data['id']
 
-        # Configure the background polling interval through the real API.
         response = self.client.patch(
             f'/api/devices/{device_id}/monitoring-config/',
             {'intervalSeconds': 5},
@@ -59,7 +56,6 @@ class FullSystemIntegrationTests(APITestCase):
         self.assertEqual(response.data['intervalSeconds'], 5)
         self.assertTrue(response.data['enabled'])
 
-        # Run a controlled high-latency ICMP check through the real monitor endpoint.
         with patch('network.monitoring.services.ping_ipv4') as ping:
             ping.return_value = PingResult(True, 650.0, 0.0)
             response = self.client.post(f'/api/devices/{device_id}/monitor/', {}, format='json')
@@ -68,7 +64,6 @@ class FullSystemIntegrationTests(APITestCase):
         self.assertTrue(response.data['reachable'])
         self.assertEqual(response.data['latencyMs'], 650.0)
 
-        # Monitoring result -> fault evaluation -> FaultEvent -> Notification.
         fault = FaultEvent.objects.get(
             device_id=device_id,
             fault_type=FaultEvent.FaultType.HIGH_LATENCY,
@@ -76,23 +71,20 @@ class FullSystemIntegrationTests(APITestCase):
         self.assertEqual(fault.status, FaultEvent.Status.ACTIVE)
         self.assertTrue(Notification.objects.filter(fault=fault).exists())
 
-        # Dashboard reflects the monitored device and active fault.
         response = self.client.get('/api/dashboard/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['summary']['totalDevices'], 1)
         self.assertEqual(response.data['summary']['activeFaults'], 1)
         self.assertEqual(response.data['deviceHealth'][0]['latencyMs'], 650.0)
 
-        # Monitoring and fault history contain the generated records.
         response = self.client.get(f'/api/monitoring-history/?deviceId={device_id}')
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(response.data['meta']['total'], 1)
+        self.assertGreaterEqual(response.data['meta']['count'], 1)
 
         response = self.client.get(f'/api/fault-history/?deviceId={device_id}')
         self.assertEqual(response.status_code, 200)
-        self.assertGreaterEqual(response.data['meta']['total'], 1)
+        self.assertGreaterEqual(response.data['meta']['count'], 1)
 
-        # Notification is visible and can be marked as read.
         notification = Notification.objects.get(fault=fault)
         response = self.client.get('/api/notifications/')
         self.assertEqual(response.status_code, 200)
@@ -102,7 +94,6 @@ class FullSystemIntegrationTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['status'], Notification.Status.READ)
 
-        # Fault acknowledgement and explicit resolution work through the API.
         response = self.client.post(f'/api/faults/{fault.id}/acknowledge/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['status'], FaultEvent.Status.ACKNOWLEDGED)
@@ -111,13 +102,11 @@ class FullSystemIntegrationTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['status'], FaultEvent.Status.RESOLVED)
 
-        # A healthy subsequent check exercises automatic recovery evaluation.
         with patch('network.monitoring.services.ping_ipv4') as ping:
             ping.return_value = PingResult(True, 20.0, 0.0)
             response = self.client.post(f'/api/devices/{device_id}/monitor/', {}, format='json')
         self.assertEqual(response.status_code, 200)
 
-        # The device monitoring snapshot exposes the final persisted state.
         response = self.client.get(f'/api/devices/{device_id}/monitoring-snapshot/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['device']['id'], device_id)
