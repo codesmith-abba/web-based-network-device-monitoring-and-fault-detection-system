@@ -19,6 +19,19 @@ function handleError(error: unknown, fallback: string): never {
   throw new DeviceServiceError(error instanceof Error ? error.message : fallback)
 }
 
+export function isValidIp(value: string): boolean {
+  const parts = value.trim().split('.')
+
+  if (parts.length !== 4) return false
+
+  return parts.every((part) => {
+    if (!/^\d+$/.test(part)) return false
+
+    const number = Number(part)
+    return number >= 0 && number <= 255
+  })
+}
+
 const apiService: DeviceService = {
   async list() { try { const data = await apiRequest<ApiDevice[]>('/devices/'); return data.map(mapDevice) } catch (error) { return handleError(error, 'Devices could not be loaded.') } },
   async create(input) { try { return mapDevice(await apiRequest<ApiDevice>('/devices/', { method: 'POST', body: JSON.stringify(toPayload(input)) })) } catch (error) { return handleError(error, 'Device could not be registered.') } },
