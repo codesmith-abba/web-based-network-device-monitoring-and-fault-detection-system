@@ -13,6 +13,7 @@ from datetime import datetime
 
 from django.utils import timezone
 
+from ..faults.detection import evaluate_snmp_metric
 from ..models import Device, MonitoringConfiguration, SNMPMetric
 
 
@@ -164,7 +165,7 @@ def collect_snmp_metrics(device: Device) -> SNMPResult:
             continue
 
         collected.append(result)
-        SNMPMetric.objects.create(
+        stored_metric = SNMPMetric.objects.create(
             device=device,
             timestamp=timestamp,
             metric=result.metric,
@@ -172,6 +173,7 @@ def collect_snmp_metrics(device: Device) -> SNMPResult:
             value=result.value,
             value_type=result.value_type,
         )
+        evaluate_snmp_metric(stored_metric)
 
     if collected and errors:
         status = 'partial'
