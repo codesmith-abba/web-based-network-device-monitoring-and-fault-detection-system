@@ -64,9 +64,9 @@ class MonitoringRecord(models.Model):
     class Meta:
         ordering = ['-timestamp']
         indexes = [
-            models.Index(fields=['device', '-timestamp']),
-            models.Index(fields=['timestamp']),
-            models.Index(fields=['device', 'reachable', '-timestamp']),
+            models.Index(fields=['device', '-timestamp'], name='monitoring_device_time_idx'),
+            models.Index(fields=['timestamp'], name='monitoring_timestamp_idx'),
+            models.Index(fields=['device', 'reachable', '-timestamp'], name='monitoring_device_status_time_idx'),
         ]
 
 
