@@ -24,19 +24,79 @@ function buildMonitoringTrend(
     packetLossPercent: number | null
   }>,
 ): MonitoringTrendPoint[] {
-  return histories
-    .slice()
-    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-    .map((record) => ({
-      label: new Date(record.timestamp).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-      availabilityPercent:
-        record.reachable === null ? undefined : record.reachable ? 100 : 0,
-      latencyMs: record.latencyMs ?? undefined,
-      packetLossPercent: record.packetLossPercent ?? undefined,
-    }))
+  const buckets = new Map<
+    string,
+    {
+      reachable: number
+      total: number
+      latencyTotal: number
+      latencyCount: number
+      lossTotal: number
+      lossCount: number
+    }
+  >()
+
+  for (const record of histories) {
+    const date = new Date(record.timestamp)
+
+    // Group measurements into the same minute.
+    date.setSeconds(0, 0)
+    const bucketKey = date.toISOString()
+
+    const bucket = buckets.get(bucketKey) ?? {
+      reachable: 0,
+      total: 0,
+      latencyTotal: 0,
+      latencyCount: 0,
+      lossTotal: 0,
+      lossCount: 0,
+    }
+
+    if (record.reachable !== null) {
+      bucket.total += 1
+
+      if (record.reachable) {
+        bucket.reachable += 1
+      }
+    }
+
+    if (record.latencyMs !== null) {
+      bucket.latencyTotal += record.latencyMs
+      bucket.latencyCount += 1
+    }
+
+    if (record.packetLossPercent !== null) {
+      bucket.lossTotal += record.packetLossPercent
+      bucket.lossCount += 1
+    }
+
+    buckets.set(bucketKey, bucket)
+  }
+
+  return Array.from(buckets.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([timestamp, bucket]) => {
+      const date = new Date(timestamp)
+
+      return {
+        label: date.toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        availabilityPercent:
+          bucket.total > 0
+            ? (bucket.reachable / bucket.total) * 100
+            : undefined,
+        latencyMs:
+          bucket.latencyCount > 0
+            ? bucket.latencyTotal / bucket.latencyCount
+            : undefined,
+        packetLossPercent:
+          bucket.lossCount > 0
+            ? bucket.lossTotal / bucket.lossCount
+            : undefined,
+      }
+    })
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
