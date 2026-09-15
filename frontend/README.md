@@ -22,63 +22,47 @@ Implemented `/devices`, device registration/editing, validation, monitoring enab
 
 Implemented `/devices/:deviceId` with device identity, current status, monitoring status, availability/reachability, latency, packet loss, latest result/timestamp, historical latency visualization, SNMP capability states, monitoring configuration, and loading/error/empty/partial states.
 
-`src/monitoring/service.ts` remains deliberately unconfigured unless `VITE_MONITORING_ADAPTER=mock` is enabled. Mock measurements are clearly labelled fixture data and are not live network measurements.
-
 ## Phase 6 — Fault Management
 
 Implemented `/faults` with fault type, severity, affected device, detection time, status, details, acknowledgement, resolution, search, filters, sorting, loading/empty/error states, typed `FaultService`, and a deliberately unconfigured default backend adapter.
 
 ## Phase 7 — Historical Monitoring and Fault History
 
-Implemented separate historical views:
+Implemented `/monitoring-history` and `/fault-history` with typed historical service boundaries, date/time and domain filters, responsive visualization, resolution information, and complete loading/empty/error states. Historical mock data reuses existing Phase 5 monitoring records and Phase 6 fault events; it does not fabricate new historical records.
 
-- `/monitoring-history` — historical monitoring measurements
-- `/fault-history` — historical fault events
+## Phase 8 — Notification Experience
 
-Historical monitoring provides:
+Implemented the administrator notification experience at `/notifications` and added a notification indicator to the application header.
 
-- Device filtering
-- Date/time range filtering
-- Timestamp
-- Device
-- Latency
-- Packet loss
-- Reachability
-- Responsive latency trend chart
-- Historical measurement table
-- Loading, empty, filtered-empty, and error states
-- Clear separation from current device status
+The notification experience provides:
 
-Historical fault visibility provides:
-
-- Device filtering
-- Date/time range filtering
-- Fault-type filtering
-- Severity filtering
-- Status filtering
-- Device
 - Fault type
+- Affected device
 - Severity
 - Detection time
-- Current status
-- Resolution timestamp when supplied
-- Loading, empty, filtered-empty, and error states
+- Read/unread state
+- Notification details
+- Mark-as-read interaction where the adapter supports it
+- Header unread-count indicator
+- Recent notification preview
+- Empty, loading, action-error, and unavailable states
+- Responsive notification list and details dialog
 
-### Historical data boundary
+### Notification architecture
 
-Phase 7 introduces dedicated typed service boundaries in `src/history/`:
+Phase 8 introduces `src/notifications/` with a typed service boundary:
 
 ```text
-MonitoringHistoryService
-└── list()
-
-FaultHistoryService
-└── list()
+NotificationService
+├── list()
+└── markAsRead(notificationId)
 ```
 
-The default services remain unconfigured until the Django/DRF historical API contracts exist. The mock historical monitoring view reuses the monitoring records already defined by the Phase 5 mock adapter; the fault history view reuses the existing Phase 6 fault fixtures. No new historical measurements or fault events are fabricated by Phase 7.
+The default service deliberately remains unconfigured until the Django/DRF notification API contract exists. The development adapter derives notifications from the existing fault service so the frontend can be exercised without inventing a backend endpoint or notification channel.
 
-### Historical state testing
+No email, SMS, browser push, or other external notification delivery is claimed by this frontend phase. Those channels require explicit backend implementation and contracts.
+
+### Notification development testing
 
 From `frontend/`:
 
@@ -87,27 +71,25 @@ VITE_AUTH_ADAPTER=mock \
 VITE_DEVICES_ADAPTER=mock \
 VITE_MONITORING_ADAPTER=mock \
 VITE_FAULTS_ADAPTER=mock \
+VITE_NOTIFICATIONS_ADAPTER=mock \
 npm run dev
 ```
 
 Open:
 
 ```text
-/monitoring-history
-/fault-history
+/notifications
 ```
 
-Use the development history scenarios:
+Notification scenarios:
 
 ```bash
-VITE_HISTORY_SCENARIO=populated
-VITE_HISTORY_SCENARIO=empty
-VITE_HISTORY_SCENARIO=partial
-VITE_HISTORY_SCENARIO=error
-VITE_HISTORY_SCENARIO=loading
+VITE_NOTIFICATIONS_SCENARIO=populated
+VITE_NOTIFICATIONS_SCENARIO=empty
+VITE_NOTIFICATIONS_SCENARIO=partial
+VITE_NOTIFICATIONS_SCENARIO=error
+VITE_NOTIFICATIONS_SCENARIO=loading
 ```
-
-The development banners explicitly identify reused fixture data. Production historical records must come from the eventual backend monitoring and fault-history services.
 
 ## Architecture
 
@@ -120,6 +102,7 @@ src/
 ├── faults/           # Fault contracts and service boundary
 ├── history/          # Historical monitoring/fault contracts and service boundaries
 ├── monitoring/       # Device monitoring contracts and service boundary
+├── notifications/    # Notification contracts and service boundary
 ├── layouts/          # Application-level layouts and shell
 ├── pages/            # Page-level views
 └── types/            # Shared TypeScript contracts
@@ -141,19 +124,14 @@ npm install
 npm run dev
 ```
 
-Authentication testing:
-
-```bash
-VITE_AUTH_ADAPTER=mock npm run dev
-```
-
-For Phase 7 historical views:
+For the full frontend mock environment:
 
 ```bash
 VITE_AUTH_ADAPTER=mock \
 VITE_DEVICES_ADAPTER=mock \
 VITE_MONITORING_ADAPTER=mock \
 VITE_FAULTS_ADAPTER=mock \
+VITE_NOTIFICATIONS_ADAPTER=mock \
 npm run dev
 ```
 
@@ -166,18 +144,17 @@ npm run lint
 npm run build
 ```
 
-Phase 7 acceptance checks:
+Phase 8 acceptance checks:
 
 1. Authenticate with the development auth adapter.
-2. Open `/monitoring-history` and verify historical measurements are distinct from current device status.
-3. Filter monitoring history by device and date/time range.
-4. Verify latency and packet-loss values, timestamps, and reachability are displayed.
-5. Verify the latency chart remains readable on mobile through horizontal scrolling when required.
-6. Open `/fault-history` and verify device, fault type, severity, detection time, status, and supplied resolution information.
-7. Filter fault history by device, date/time, fault type, severity, and status.
-8. Verify loading, empty, filtered-empty, partial, and error states.
-9. Verify mock historical monitoring reuses existing monitoring records rather than creating fabricated history.
-10. Verify mock fault history reuses existing fault events rather than creating fabricated live faults.
-11. Verify the default non-mock services report not-configured errors rather than guessing backend endpoints.
-12. Resize across desktop, tablet, and mobile widths.
-13. Run `npm run lint` and `npm run build` before merging.
+2. Verify the header notification indicator is visible and keyboard accessible.
+3. Verify unread notifications produce an explicit unread count.
+4. Open `/notifications` and verify fault type, device, severity, and detection time.
+5. Open notification details and verify the complete notification information.
+6. Mark an unread notification as read and verify the list and header state update.
+7. Verify empty, loading, error, and action-error states.
+8. Verify the development adapter reuses existing fault fixtures rather than fabricating live backend notifications.
+9. Verify the default non-mock notification service reports a not-configured state rather than guessing an API endpoint.
+10. Verify no email, SMS, push, or other external delivery is presented as implemented.
+11. Resize across desktop, tablet, and mobile widths.
+12. Run `npm run lint` and `npm run build` before merging.
