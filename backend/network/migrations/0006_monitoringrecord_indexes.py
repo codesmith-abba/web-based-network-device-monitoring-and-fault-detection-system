@@ -19,6 +19,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='monitoringrecord',
-            index=models.Index(fields=['device', 'reachable', '-timestamp'], name='monitoring_device_status_time_idx'),
+            index=models.Index(fields=['device', 'reachable', '-timestamp'], name='monitoring_device_status_idx'),
         ),
     ]
