@@ -1,7 +1,6 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.urls import reverse
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
@@ -14,7 +13,12 @@ User = get_user_model()
 
 class NetworkApiTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username='admin', password='admin123')
+        self.user = User.objects.create_user(
+            username='admin',
+            email='admin@example.com',
+            password='admin123',
+            is_staff=True,
+        )
         self.token = Token.objects.create(user=self.user)
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.token.key}')
         self.device = Device.objects.create(
@@ -112,6 +116,52 @@ class NetworkApiTests(APITestCase):
         response = self.client.get('/api/auth/me/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['username'], 'admin')
+
+    def test_auth_login_accepts_admin_email(self):
+        self.client.credentials()
+        response = self.client.post('/api/auth/login/', {
+            'username': 'admin@example.com',
+            'password': 'admin123',
+        }, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['user']['username'], 'admin')
+
+    def test_auth_rejects_invalid_credentials(self):
+        self.client.credentials()
+        response = self.client.post('/api/auth/login/', {
+            'username': 'admin',
+            'password': 'wrong-password',
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn('token', response.data)
+
+    def test_auth_rejects_non_administrator_login(self):
+        User.objects.create_user(username='operator', password='operator123')
+        self.client.credentials()
+        response = self.client.post('/api/auth/login/', {
+            'username': 'operator',
+            'password': 'operator123',
+        }, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn('token', response.data)
+
+    def test_auth_password_is_hashed(self):
+        self.assertNotEqual(self.user.password, 'admin123')
+        self.assertTrue(self.user.check_password('admin123'))
+
+    def test_logout_invalidates_token(self):
+        response = self.client.post('/api/auth/logout/')
+        self.assertEqual(response.status_code, 204)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {self.token.key}')
+        response = self.client.get('/api/auth/me/')
+        self.assertEqual(response.status_code, 401)
+
+    def test_authenticated_non_admin_user_is_forbidden(self):
+        operator = User.objects.create_user(username='operator', password='operator123')
+        token = Token.objects.create(user=operator)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {token.key}')
+        response = self.client.get('/api/dashboard/')
+        self.assertEqual(response.status_code, 403)
 
 
 class BackendFoundationTests(APITestCase):
