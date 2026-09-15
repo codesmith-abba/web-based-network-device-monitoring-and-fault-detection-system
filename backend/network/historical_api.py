@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from django.db.models import Avg, Count, Q
 from django.db.models.functions import TruncDay, TruncHour, TruncMinute
@@ -21,19 +21,19 @@ MAX_RANGE_DAYS = 366
 def _parse_range(request, field_name):
     value = request.query_params.get(field_name)
     if not value:
-        return None, None
+        return None
 
     parsed = parse_datetime(value)
     if parsed is None:
         raise ValueError(f'Invalid {field_name} datetime. Use an ISO-8601 datetime.')
     if timezone.is_naive(parsed):
         parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
-    return parsed, value
+    return parsed
 
 
 def _apply_date_range(queryset, request, field):
-    start, _ = _parse_range(request, 'from')
-    end, _ = _parse_range(request, 'to')
+    start = _parse_range(request, 'from')
+    end = _parse_range(request, 'to')
 
     if start and end and start > end:
         raise ValueError('The from datetime must be earlier than or equal to the to datetime.')
@@ -66,7 +66,7 @@ def _monitoring_bucket_expression(aggregation):
     try:
         return expressions[aggregation]
     except KeyError as exc:
-        raise ValueError("aggregation must be one of: minute, hour, day.") from exc
+        raise ValueError('aggregation must be one of: minute, hour, day.') from exc
 
 
 class MonitoringHistoryView(APIView):
@@ -88,7 +88,7 @@ class MonitoringHistoryView(APIView):
 
             aggregation = request.query_params.get('aggregation')
             if not aggregation:
-                records = queryset.order_by('-timestamp')[:limit]
+                records = list(queryset.order_by('-timestamp')[:limit])
                 return Response({
                     'records': HistoricalMonitoringRecordSerializer(records, many=True).data,
                     'meta': {
@@ -99,7 +99,7 @@ class MonitoringHistoryView(APIView):
                 })
 
             bucket_expression = _monitoring_bucket_expression(aggregation)
-            buckets = (
+            buckets = list(
                 queryset
                 .annotate(bucket=bucket_expression)
                 .values('bucket')
@@ -113,7 +113,7 @@ class MonitoringHistoryView(APIView):
             )
 
             serialized = []
-            for bucket in reversed(list(buckets)):
+            for bucket in reversed(buckets):
                 total = bucket['records']
                 reachable_count = bucket['reachable_records']
                 serialized.append({
@@ -162,7 +162,7 @@ class FaultHistoryView(APIView):
             aggregation = request.query_params.get('aggregation')
 
             if not aggregation:
-                faults = queryset.order_by('-detected_at')[:limit]
+                faults = list(queryset.order_by('-detected_at')[:limit])
                 return Response({
                     'faults': FaultSerializer(faults, many=True).data,
                     'meta': {
@@ -175,10 +175,9 @@ class FaultHistoryView(APIView):
             if aggregation != 'day':
                 raise ValueError('Fault aggregation currently supports: day.')
 
-            bucket_expression = TruncDay('detected_at')
-            buckets = (
+            buckets = list(
                 queryset
-                .annotate(bucket=bucket_expression)
+                .annotate(bucket=TruncDay('detected_at'))
                 .values('bucket')
                 .annotate(
                     faults=Count('id'),
@@ -194,7 +193,7 @@ class FaultHistoryView(APIView):
             )
 
             serialized = []
-            for bucket in reversed(list(buckets)):
+            for bucket in reversed(buckets):
                 serialized.append({
                     'timestamp': bucket['bucket'],
                     'faults': bucket['faults'],
