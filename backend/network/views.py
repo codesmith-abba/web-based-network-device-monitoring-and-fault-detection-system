@@ -24,6 +24,7 @@ from .serializers import (
     SNMPMetricSerializer,
 )
 from .snmp.services import collect_snmp_metrics
+from .tasks import monitor_device_task
 
 
 class LoginView(APIView):
@@ -92,6 +93,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
     def monitoring(self, request, pk=None):
         """Read or update only the device monitoring enabled state."""
         device = self.get_object()
+
         if request.method == 'PATCH':
             serializer = DeviceSerializer(
                 device,
@@ -101,6 +103,10 @@ class DeviceViewSet(viewsets.ModelViewSet):
             serializer.is_valid(raise_exception=True)
             serializer.save()
             device.refresh_from_db()
+
+            if device.monitoring_enabled:
+                monitor_device_task.delay(str(device.id))
+
         return Response(DeviceSerializer(device).data)
 
     @action(detail=True, methods=['get', 'patch'], url_path='monitoring-config')

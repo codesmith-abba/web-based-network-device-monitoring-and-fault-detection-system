@@ -1,5 +1,5 @@
 import { apiRequest, ApiError } from '../api/client'
-import { DeviceServiceError, type Device, type DeviceRegistrationInput, type DeviceService, type MonitoringState } from './types'
+import { DeviceServiceError, type Device, type DeviceRegistrationInput, type DeviceService } from './types'
 
 interface ApiDevice {
   id: string
@@ -7,12 +7,17 @@ interface ApiDevice {
   ipAddress: string
   type: Device['type']
   status: Device['status']
-  monitoring: MonitoringState
+  monitoring: boolean
   createdAt: string
   updatedAt: string
 }
 
-function mapDevice(device: ApiDevice): Device { return device }
+function mapDevice(device: ApiDevice): Device {
+  return {
+    ...device,
+    monitoring: device.monitoring ? 'enabled' : 'disabled',
+  }
+}
 
 function toPayload(input: DeviceRegistrationInput) {
   return {
