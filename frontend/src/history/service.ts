@@ -8,13 +8,13 @@ function handleError(error: unknown): never {
 
 export const monitoringHistoryService: MonitoringHistoryService = {
   async list(): Promise<MonitoringHistoryResult> {
-    try { return { records: await apiRequest<MonitoringHistoryResult['records']>('/monitoring-history/') } } catch (error) { return handleError(error) }
+    try { return await apiRequest<MonitoringHistoryResult>('/monitoring-history/') } catch (error) { return handleError(error) }
   },
 }
 
 export const faultHistoryService: FaultHistoryService = {
   async list(): Promise<FaultHistoryResult> {
-    try { return { faults: await apiRequest<FaultHistoryResult['faults']>('/fault-history/') } } catch (error) { return handleError(error) }
+    try { return await apiRequest<FaultHistoryResult>('/fault-history/') } catch (error) { return handleError(error) }
   },
 }
 
