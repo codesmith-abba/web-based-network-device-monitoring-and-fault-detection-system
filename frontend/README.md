@@ -22,72 +22,74 @@ Implemented `/devices`, device registration/editing, validation, monitoring enab
 
 Implemented `/devices/:deviceId` with device identity, current status, monitoring status, availability/reachability, latency, packet loss, latest result/timestamp, historical latency visualization, SNMP capability states, monitoring configuration, and loading/error/empty/partial states.
 
-`src/monitoring/service.ts` remains deliberately unconfigured unless `VITE_MONITORING_ADAPTER=mock` is enabled. Mock measurements are clearly labelled fixture data and are not live network measurements.
-
 ## Phase 6 — Fault Management
 
-Phase 6 adds the administrator fault-management experience at `/faults`.
+Implemented `/faults` with fault type, severity, affected device, detection time, status, details, acknowledgement, resolution, search, filters, sorting, loading/empty/error states, typed `FaultService`, and a deliberately unconfigured default backend adapter.
 
-Implemented:
+## Phase 7 — Historical Monitoring and Fault History
 
-- Fault event list with fault type, severity, affected device, detection time, and current status
-- Active/acknowledged versus resolved distinction
-- Severity presentation with text and symbols rather than color alone
-- Fault details dialog with description and resolution timestamp when supplied
-- Acknowledge workflow
-- Resolve workflow
-- Search by device, fault type, and description
-- Severity filtering
-- Status filtering
-- Fault-type filtering
-- Device filtering
-- Detection-time sorting, newest first
-- Active/acknowledged and resolved summary counts
-- Loading, empty, filtered-empty, API-error, and action-error states
-- Typed `FaultEvent`, `FaultService`, status/severity/type contracts, and service errors
-- Explicit service boundary for future Django/DRF integration
-- Development-only fault scenarios: `populated`, `empty`, `partial`, `error`, and `loading`
-- Explicit development fixture banner so fault fixtures cannot be mistaken for automatically detected live faults
+Implemented `/monitoring-history` and `/fault-history` with typed historical service boundaries, date/time and domain filters, responsive visualization, resolution information, and complete loading/empty/error states. Historical mock data reuses existing Phase 5 monitoring records and Phase 6 fault events; it does not fabricate new historical records.
 
-### Fault data boundary
+## Phase 8 — Notification Experience
 
-`src/faults/types.ts` defines the frontend contract:
+Implemented the administrator notification experience at `/notifications` and added a notification indicator to the application header.
+
+The notification experience provides:
+
+- Fault type
+- Affected device
+- Severity
+- Detection time
+- Read/unread state
+- Notification details
+- Mark-as-read interaction where the adapter supports it
+- Header unread-count indicator
+- Recent notification preview
+- Empty, loading, action-error, and unavailable states
+- Responsive notification list and details dialog
+
+### Notification architecture
+
+Phase 8 introduces `src/notifications/` with a typed service boundary:
 
 ```text
-FaultService
+NotificationService
 ├── list()
-├── get(faultId)
-├── acknowledge(faultId)
-├── updateStatus(faultId, status)
-└── resolve(faultId)
+└── markAsRead(notificationId)
 ```
 
-`src/faults/service.ts` contains the adapter boundary. The default service does not guess Django/DRF URLs, HTTP methods, payloads, authentication behavior, or backend response shapes. Status mutations are only available through the temporary mock adapter until the real backend contract is defined.
+The default service deliberately remains unconfigured until the Django/DRF notification API contract exists. The development adapter derives notifications from the existing fault service so the frontend can be exercised without inventing a backend endpoint or notification channel.
 
-### Fault state testing
+No email, SMS, browser push, or other external notification delivery is claimed by this frontend phase. Those channels require explicit backend implementation and contracts.
+
+### Notification development testing
 
 From `frontend/`:
 
 ```bash
 VITE_AUTH_ADAPTER=mock \
 VITE_DEVICES_ADAPTER=mock \
+VITE_MONITORING_ADAPTER=mock \
 VITE_FAULTS_ADAPTER=mock \
+VITE_NOTIFICATIONS_ADAPTER=mock \
 npm run dev
 ```
 
-Then open `/faults`.
+Open:
 
-Use these development scenarios:
-
-```bash
-VITE_FAULTS_SCENARIO=populated
-VITE_FAULTS_SCENARIO=empty
-VITE_FAULTS_SCENARIO=partial
-VITE_FAULTS_SCENARIO=error
-VITE_FAULTS_SCENARIO=loading
+```text
+/notifications
 ```
 
-The fixture adapter exists only to exercise the frontend states and interaction flows. Production fault events must come from the eventual fault-detection/backend service.
+Notification scenarios:
+
+```bash
+VITE_NOTIFICATIONS_SCENARIO=populated
+VITE_NOTIFICATIONS_SCENARIO=empty
+VITE_NOTIFICATIONS_SCENARIO=partial
+VITE_NOTIFICATIONS_SCENARIO=error
+VITE_NOTIFICATIONS_SCENARIO=loading
+```
 
 ## Architecture
 
@@ -98,7 +100,9 @@ src/
 ├── dashboard/        # Dashboard data contracts and service boundary
 ├── devices/          # Device contracts and service boundary
 ├── faults/           # Fault contracts and service boundary
+├── history/          # Historical monitoring/fault contracts and service boundaries
 ├── monitoring/       # Device monitoring contracts and service boundary
+├── notifications/    # Notification contracts and service boundary
 ├── layouts/          # Application-level layouts and shell
 ├── pages/            # Page-level views
 └── types/            # Shared TypeScript contracts
@@ -120,37 +124,16 @@ npm install
 npm run dev
 ```
 
-Authentication testing:
+For the full frontend mock environment:
 
 ```bash
-VITE_AUTH_ADAPTER=mock npm run dev
+VITE_AUTH_ADAPTER=mock \
+VITE_DEVICES_ADAPTER=mock \
+VITE_MONITORING_ADAPTER=mock \
+VITE_FAULTS_ADAPTER=mock \
+VITE_NOTIFICATIONS_ADAPTER=mock \
+npm run dev
 ```
-
-Dashboard state testing:
-
-```bash
-VITE_DASHBOARD_ADAPTER=mock VITE_DASHBOARD_SCENARIO=populated npm run dev
-```
-
-Device-management state testing:
-
-```bash
-VITE_DEVICES_ADAPTER=mock VITE_DEVICES_SCENARIO=populated npm run dev
-```
-
-Device-details testing:
-
-```bash
-VITE_AUTH_ADAPTER=mock VITE_DEVICES_ADAPTER=mock VITE_MONITORING_ADAPTER=mock npm run dev
-```
-
-Fault-management testing:
-
-```bash
-VITE_AUTH_ADAPTER=mock VITE_DEVICES_ADAPTER=mock VITE_FAULTS_ADAPTER=mock npm run dev
-```
-
-Then open `/faults`.
 
 ## Validation
 
@@ -161,18 +144,17 @@ npm run lint
 npm run build
 ```
 
-Phase 6 acceptance checks:
+Phase 8 acceptance checks:
 
-1. Authenticate with the development auth adapter and open `/faults`.
-2. Verify fault type, severity, affected device, detection time, and status are displayed.
-3. Verify active/acknowledged and resolved faults are clearly distinguishable.
-4. Open fault details and verify all supplied fault information is shown.
-5. Verify active faults can be acknowledged through the configured mock adapter.
-6. Verify unresolved faults can be resolved through the configured mock adapter.
-7. Verify severity, status, fault type, device, and text search filters.
-8. Verify newest detection time appears first.
-9. Verify loading, empty, filtered-empty, partial, and error states.
-10. Verify the default non-mock service reports not-configured/unsupported actions rather than making guessed API requests.
-11. Verify fixture events are visibly labelled as development data and are never presented as live detected faults.
-12. Resize across desktop, tablet, and mobile widths and verify the fault workflow remains usable.
-13. Run `npm run lint` and `npm run build` before merging.
+1. Authenticate with the development auth adapter.
+2. Verify the header notification indicator is visible and keyboard accessible.
+3. Verify unread notifications produce an explicit unread count.
+4. Open `/notifications` and verify fault type, device, severity, and detection time.
+5. Open notification details and verify the complete notification information.
+6. Mark an unread notification as read and verify the list and header state update.
+7. Verify empty, loading, error, and action-error states.
+8. Verify the development adapter reuses existing fault fixtures rather than fabricating live backend notifications.
+9. Verify the default non-mock notification service reports a not-configured state rather than guessing an API endpoint.
+10. Verify no email, SMS, push, or other external delivery is presented as implemented.
+11. Resize across desktop, tablet, and mobile widths.
+12. Run `npm run lint` and `npm run build` before merging.
