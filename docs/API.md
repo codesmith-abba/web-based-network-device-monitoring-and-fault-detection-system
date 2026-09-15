@@ -1,8 +1,8 @@
-# Backend API — Device Management
+# Backend API — Device Management and ICMP Monitoring
 
 ## Authentication
 
-All device-management endpoints require a Django REST Framework token belonging to an active administrator (`is_staff=True`).
+All device-management and monitoring endpoints require a Django REST Framework token belonging to an active administrator (`is_staff=True`).
 
 ```http
 Authorization: Token <token>
@@ -40,9 +40,9 @@ Supported status values:
 - `offline`
 - `unknown`
 
-Status is read-only from the device-management API and is intended to be updated by the monitoring engine.
+Status is read-only from the device-management API and is updated by the monitoring engine.
 
-## Endpoints
+## Device endpoints
 
 ### List devices
 
@@ -78,8 +78,6 @@ GET /api/devices/<id>/
 
 ### Update a device
 
-Both partial and full updates are supported:
-
 ```http
 PATCH /api/devices/<id>/
 PUT /api/devices/<id>/
@@ -111,13 +109,74 @@ Example:
 
 The monitoring configuration association is preserved when monitoring is disabled.
 
-### Get monitoring snapshot
+## ICMP monitoring
+
+The monitoring engine performs one bounded IPv4 ICMP echo request per monitoring execution. Ping execution is isolated from API views and uses `subprocess.run` without a shell. Timeouts, missing system ping utilities, and network errors are converted into an unreachable monitoring result rather than being allowed to crash the web application.
+
+### Run an ICMP check
+
+```http
+POST /api/devices/<id>/monitor/
+```
+
+The endpoint executes one ICMP check, stores a `MonitoringRecord`, updates the device status to `online` or `offline`, and returns the stored result.
+
+Successful response example:
+
+```json
+{
+  "id": "<record-uuid>",
+  "deviceId": "<device-uuid>",
+  "timestamp": "2026-09-15T06:30:00Z",
+  "reachable": true,
+  "latencyMs": 4.32,
+  "packetLossPercent": 0.0
+}
+```
+
+For a timeout or unreachable device, the result is persisted with `reachable: false`, `latencyMs: null`, and `packetLossPercent: 100.0`. The endpoint still returns `200 OK` because the monitoring operation itself completed successfully and the device's unreachable state is the monitoring result.
+
+Invalid monitoring configuration, disabled monitoring, and unsupported addresses return `400 Bad Request` without creating a monitoring record.
+
+### List monitoring records
+
+```http
+GET /api/monitoring-records/
+```
+
+Filter by device:
+
+```http
+GET /api/monitoring-records/?deviceId=<device-uuid>
+```
+
+### Get device monitoring snapshot
 
 ```http
 GET /api/devices/<id>/monitoring-snapshot/
 ```
 
-Returns the device, latest monitoring record, recent history, SNMP metrics placeholder, and the associated monitoring configuration.
+Returns the device, latest monitoring record, recent history, SNMP metrics placeholder, and associated monitoring configuration.
+
+### Monitoring history
+
+```http
+GET /api/monitoring-history/
+GET /api/monitoring-history/?deviceId=<device-uuid>
+GET /api/monitoring-history/?from=<iso-datetime>&to=<iso-datetime>
+```
+
+## ICMP engine behavior
+
+- IPv4 addresses are validated before ping execution.
+- One ICMP request is sent per monitoring execution.
+- The default ping timeout is 2 seconds.
+- No shell is invoked for the ping command.
+- Successful responses record reachability and parsed latency in milliseconds.
+- Timeouts and network failures record the device as unreachable.
+- The device status is synchronized with the latest result.
+- Monitoring configuration requires an interval of at least 5 seconds.
+- Monitoring failures do not propagate as unhandled exceptions from the API.
 
 ## Validation
 
@@ -127,4 +186,4 @@ IPv6 addresses are rejected because the documented device model currently uses I
 
 ## Migration
 
-Phase 13 introduces migration `0002_rename_type_device_device_type.py`, preserving existing device data while aligning the database field name with the documented `device_type` requirement. The API continues exposing `type` to preserve the existing frontend contract.
+Phase 13 uses migration `0003_rename_type_device_device_type.py` after the existing `0002_rename_network_fau_device__f6c5a5_idx_network_fau_device__b8227f_idx_and_more.py`, avoiding a migration graph conflict while preserving existing device data. The API continues exposing `type` to preserve the existing frontend contract.
