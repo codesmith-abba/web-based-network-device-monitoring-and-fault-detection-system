@@ -1,3 +1,4 @@
+from django.db.models import Avg, Count, Max
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -48,6 +49,39 @@ class DeviceViewSet(viewsets.ModelViewSet):
         except InvalidMonitoringConfiguration as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(MonitoringRecordSerializer(record).data)
+
+    @action(detail=True, methods=['get'], url_path='monitoring-summary')
+    def monitoring_summary(self, request, pk=None):
+        """Return a compact health summary without modifying historical records."""
+        device = self.get_object()
+        queryset = MonitoringRecord.objects.filter(device=device)
+        aggregates = queryset.aggregate(
+            total=Count('id'),
+            reachable=Count('id', filter=models.Q(reachable=True)),
+            unreachable=Count('id', filter=models.Q(reachable=False)),
+            average_latency=Avg('latency_ms'),
+            average_packet_loss=Avg('packet_loss_percent'),
+            last_checked=Max('timestamp'),
+        )
+        latest = queryset.first()
+        total = aggregates['total'] or 0
+        reachable = aggregates['reachable'] or 0
+        availability = round((reachable / total) * 100, 2) if total else None
+
+        return Response({
+            'deviceId': str(device.id),
+            'deviceName': device.name,
+            'status': device.status,
+            'monitoringEnabled': device.monitoring_enabled,
+            'totalRecords': total,
+            'reachableRecords': reachable,
+            'unreachableRecords': aggregates['unreachable'] or 0,
+            'availabilityPercent': availability,
+            'averageLatencyMs': round(aggregates['average_latency'], 3) if aggregates['average_latency'] is not None else None,
+            'averagePacketLossPercent': round(aggregates['average_packet_loss'], 3) if aggregates['average_packet_loss'] is not None else None,
+            'lastCheckedAt': aggregates['last_checked'],
+            'latest': MonitoringRecordSerializer(latest).data if latest else None,
+        })
 
     @action(detail=True, methods=['get', 'patch', 'post'], url_path='snmp')
     def snmp(self, request, pk=None):
