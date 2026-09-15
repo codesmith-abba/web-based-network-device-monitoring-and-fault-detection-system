@@ -45,7 +45,16 @@ const apiService: DeviceService = {
   async list() { try { const data = await apiRequest<ApiDevice[]>('/devices/'); return data.map(mapDevice) } catch (error) { return handleError(error, 'Devices could not be loaded.') } },
   async create(input) { try { return mapDevice(await apiRequest<ApiDevice>('/devices/', { method: 'POST', body: JSON.stringify(toPayload(input)) })) } catch (error) { return handleError(error, 'Device could not be registered.') } },
   async update(id, input) { try { return mapDevice(await apiRequest<ApiDevice>(`/devices/${id}/`, { method: 'PATCH', body: JSON.stringify(toPayload(input)) })) } catch (error) { return handleError(error, 'Device could not be updated.') } },
-  async setMonitoring(id, monitoring) { try { return mapDevice(await apiRequest<ApiDevice>(`/devices/${id}/monitoring/`, { method: 'PATCH', body: JSON.stringify({ monitoring: Boolean(monitoring) }) })) } catch (error) { return handleError(error, 'Monitoring state could not be updated.') } },
+  async setMonitoring(id, monitoring) {
+    try {
+      return mapDevice(await apiRequest<ApiDevice>(`/devices/${id}/monitoring/`, {
+        method: 'PATCH',
+        body: JSON.stringify({ monitoring: Boolean(monitoring) }),
+      }))
+    } catch (error) {
+      return handleError(error, 'Monitoring state could not be updated.')
+    }
+  },
 }
 
 export function getDeviceService(): DeviceService { return apiService }
