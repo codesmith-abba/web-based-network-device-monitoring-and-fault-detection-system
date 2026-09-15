@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 from .alerts.services import mark_notification_read
 from .devices.services import ensure_monitoring_configuration
 from .faults.services import acknowledge_fault, resolve_fault
-from .models import Device, FaultEvent, MonitoringConfiguration, MonitoringRecord, Notification
+from .models import Device, FaultEvent, MonitoringConfiguration, MonitoringRecord, Notification, SNMPMetric
 from .monitoring import InvalidMonitoringConfiguration, monitor_device
 from .serializers import (
     DeviceSerializer,
@@ -19,7 +19,9 @@ from .serializers import (
     MonitoringConfigurationSerializer,
     MonitoringRecordSerializer,
     NotificationSerializer,
+    SNMPMetricSerializer,
 )
+from .snmp import collect_snmp_metrics, get_supported_metrics
 
 
 class DeviceViewSet(viewsets.ModelViewSet):
@@ -47,17 +49,57 @@ class DeviceViewSet(viewsets.ModelViewSet):
             return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(MonitoringRecordSerializer(record).data)
 
+    @action(detail=True, methods=['get', 'patch', 'post'], url_path='snmp')
+    def snmp(self, request, pk=None):
+        """Configure, inspect, or poll SNMP without affecting ICMP monitoring."""
+        device = self.get_object()
+        configuration = ensure_monitoring_configuration(device)
+
+        if request.method == 'GET':
+            metrics = SNMPMetric.objects.filter(device=device)[:100]
+            return Response({
+                'configuration': MonitoringConfigurationSerializer(configuration).data,
+                'supportedMetrics': get_supported_metrics(),
+                'metrics': SNMPMetricSerializer(metrics, many=True).data,
+            })
+
+        if request.method == 'PATCH':
+            serializer = MonitoringConfigurationSerializer(
+                configuration,
+                data=request.data,
+                partial=True,
+            )
+            serializer.is_valid(raise_exception=True)
+            configuration = serializer.save()
+            return Response(MonitoringConfigurationSerializer(configuration).data)
+
+        result = collect_snmp_metrics(device)
+        return Response({
+            'status': result.status,
+            'metrics': [
+                {
+                    'metricName': item.metric,
+                    'oid': item.oid,
+                    'value': item.value,
+                    'valueType': item.value_type,
+                }
+                for item in result.metrics
+            ],
+            'errors': list(result.errors),
+        })
+
     @action(detail=True, methods=['get'], url_path='monitoring-snapshot')
     def monitoring_snapshot(self, request, pk=None):
         device = self.get_object()
         configuration = ensure_monitoring_configuration(device)
         records = MonitoringRecord.objects.filter(device=device)[:50]
         latest = records[0] if records else None
+        snmp_metrics = SNMPMetric.objects.filter(device=device)[:50]
         return Response({
             'device': DeviceSerializer(device).data,
             'latest': MonitoringRecordSerializer(latest).data if latest else None,
             'history': MonitoringRecordSerializer(records, many=True).data,
-            'snmpMetrics': [],
+            'snmpMetrics': SNMPMetricSerializer(snmp_metrics, many=True).data,
             'configuration': MonitoringConfigurationSerializer(configuration).data,
         })
 
