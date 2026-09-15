@@ -112,6 +112,66 @@ Celery and Redis are established as the background-processing foundation. The Ce
 
 This phase does **not** claim that live ICMP/SNMP monitoring workers are already running. Actual periodic monitoring, network probing, fault detection, and retry scheduling belong to the monitoring-worker implementation phase.
 
+## Device Management Backend — Phase 13
+
+Phase 13 implements the backend device-management lifecycle against the documented Chapter 3 data requirements.
+
+### Device model
+
+The persistence model contains:
+
+* UUID `id`
+* `name`
+* IPv4 `ip_address`
+* `device_type`
+* monitoring `status`
+* `monitoring_enabled`
+* creation/update timestamps
+
+The API continues exposing `type` and `ipAddress` to preserve the established frontend contract while the database field is now explicitly named `device_type`.
+
+### Device types
+
+Supported values are:
+
+* `router`
+* `switch`
+* `server`
+* `access-point`
+* `firewall`
+* `other`
+
+### Device management API
+
+```text
+GET    /api/devices/
+POST   /api/devices/
+GET    /api/devices/<id>/
+PATCH  /api/devices/<id>/
+PUT    /api/devices/<id>/
+DELETE /api/devices/<id>/
+PATCH  /api/devices/<id>/monitoring/
+GET    /api/devices/<id>/monitoring-snapshot/
+```
+
+Device management is restricted to authenticated Django staff users (`is_staff=True`). Unauthenticated requests receive `401`; authenticated non-administrators receive `403`.
+
+Registration automatically creates the associated one-to-one `MonitoringConfiguration`. Deleting a device uses the existing cascade relationships, so its monitoring configuration, monitoring records, and fault records are deleted with the device. This is intentionally destructive behavior and should be treated accordingly by clients.
+
+### Validation
+
+The API validates:
+
+* required/non-empty device names
+* IPv4 addresses
+* supported device types
+
+IPv6 addresses are rejected because the current documented model is IPv4-based.
+
+### API documentation
+
+Detailed device-management API documentation is available in `docs/API.md`.
+
 ## Existing API Contract
 
 ### Authentication
@@ -132,6 +192,7 @@ POST   /api/devices/
 GET    /api/devices/<id>/
 PATCH  /api/devices/<id>/
 PUT    /api/devices/<id>/
+DELETE /api/devices/<id>/
 PATCH  /api/devices/<id>/monitoring/
 GET    /api/devices/<id>/monitoring-snapshot/
 ```
@@ -231,6 +292,7 @@ Creating a fault automatically creates its notification record. Email, SMS, and 
 * Phase 9B — Frontend API Integration — implemented
 * Phase 10 — Frontend Testing and Hardening — in progress
 * Phase 11 — Django Backend Foundation — implemented
+* Phase 13 — Device Management Backend — implemented
 
 ## Validation
 
@@ -238,11 +300,12 @@ From `backend/`:
 
 ```bash
 python manage.py check
+python manage.py makemigrations --check
 python manage.py migrate
 python manage.py test
 ```
 
-Phase 11 adds automated coverage for the public health endpoint while preserving the existing API contract tests.
+Phase 13 adds device lifecycle, validation, administrator-access, monitoring-association, and delete-behavior coverage while preserving the existing API contract.
 
 ## Academic Project
 
