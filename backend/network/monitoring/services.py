@@ -133,9 +133,7 @@ def monitor_device(device: Device) -> MonitoringRecord:
 
     _get_configuration(device)
 
-    from . import ping_ipv4 as ping
-
-    result = ping(str(device.ip_address))
+    result = ping_ipv4(str(device.ip_address))
 
     record = MonitoringRecord.objects.create(
         device=device,
