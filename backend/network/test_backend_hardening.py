@@ -6,7 +6,6 @@ from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
-from .faults.detection import evaluate_monitoring_record
 from .models import Device, FaultEvent, MonitoringRecord, Notification
 from .tasks import monitor_device_task
 
