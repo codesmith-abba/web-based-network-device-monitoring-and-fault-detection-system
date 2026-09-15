@@ -1,14 +1,10 @@
-from datetime import timedelta
-
-from django.db.models import Count, Q
-from django.utils import timezone
 from rest_framework import status, viewsets
-from rest_framework.authentication import TokenAuthentication
-from rest_framework.decorators import action, api_view, authentication_classes, permission_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from rest_framework.views import APIView
+from django.utils import timezone
 
 from .models import Device, FaultEvent, MonitoringConfiguration, MonitoringRecord, Notification
 from .serializers import (
@@ -20,6 +16,9 @@ from .serializers import (
     MonitoringRecordSerializer,
     NotificationSerializer,
 )
+from .devices.services import ensure_monitoring_configuration
+from .faults.services import acknowledge_fault, resolve_fault
+from .alerts.services import mark_notification_read
 
 
 class DeviceViewSet(viewsets.ModelViewSet):
@@ -38,7 +37,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], url_path='monitoring-snapshot')
     def monitoring_snapshot(self, request, pk=None):
         device = self.get_object()
-        configuration, _ = MonitoringConfiguration.objects.get_or_create(device=device)
+        configuration = ensure_monitoring_configuration(device)
         records = MonitoringRecord.objects.filter(device=device)[:50]
         latest = records[0] if records else None
         return Response({
@@ -70,18 +69,15 @@ class FaultViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def acknowledge(self, request, pk=None):
         fault = self.get_object()
-        if fault.status == FaultEvent.Status.RESOLVED:
-            return Response({'detail': 'Resolved faults cannot be acknowledged.'}, status=status.HTTP_400_BAD_REQUEST)
-        fault.status = FaultEvent.Status.ACKNOWLEDGED
-        fault.save(update_fields=['status'])
+        try:
+            fault = acknowledge_fault(fault)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(self.get_serializer(fault).data)
 
     @action(detail=True, methods=['post'])
     def resolve(self, request, pk=None):
-        fault = self.get_object()
-        fault.status = FaultEvent.Status.RESOLVED
-        fault.resolved_at = timezone.now()
-        fault.save(update_fields=['status', 'resolved_at'])
+        fault = resolve_fault(self.get_object())
         return Response(self.get_serializer(fault).data)
 
     @action(detail=True, methods=['patch'], url_path='status')
@@ -105,9 +101,7 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='read')
     def mark_read(self, request, pk=None):
-        notification = self.get_object()
-        notification.status = Notification.Status.READ
-        notification.save(update_fields=['status'])
+        notification = mark_notification_read(self.get_object())
         return Response(self.get_serializer(notification).data)
 
 
