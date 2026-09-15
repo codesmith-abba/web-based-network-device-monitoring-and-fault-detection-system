@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.db import models, transaction
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
+from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
@@ -15,12 +16,54 @@ from .serializers import (
     DeviceSerializer,
     FaultSerializer,
     HistoricalMonitoringRecordSerializer,
+    LoginSerializer,
     MonitoringConfigurationSerializer,
     MonitoringRecordSerializer,
     NotificationSerializer,
     SNMPMetricSerializer,
 )
 from .snmp.services import collect_snmp_metrics
+
+
+class LoginView(APIView):
+    permission_classes = []
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        token, _ = Token.objects.get_or_create(user=user)
+        return Response({
+            'token': token.key,
+            'user': {
+                'id': user.id,
+                'username': user.get_username(),
+                'email': user.email,
+                'firstName': user.first_name,
+                'lastName': user.last_name,
+                'isStaff': user.is_staff,
+            },
+        })
+
+
+class LogoutView(APIView):
+    def post(self, request):
+        if request.auth is not None:
+            request.auth.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MeView(APIView):
+    def get(self, request):
+        user = request.user
+        return Response({
+            'id': user.id,
+            'username': user.get_username(),
+            'email': user.email,
+            'firstName': user.first_name,
+            'lastName': user.last_name,
+            'isStaff': user.is_staff,
+        })
 
 
 class DeviceViewSet(viewsets.ModelViewSet):
@@ -93,17 +136,12 @@ class DeviceViewSet(viewsets.ModelViewSet):
         result = collect_snmp_metrics(device)
         return Response({
             'status': result.status,
-            'metrics': [
-                {
-                    'metric': metric.metric,
-                    'oid': metric.oid,
-                    'value': metric.value,
-                    'valueType': metric.value_type,
-                }
-                for metric in result.metrics
-            ],
+            'metrics': SNMPMetricSerializer(
+                device.snmp_metrics.filter(timestamp__gte=timezone.now() - timedelta(seconds=5)),
+                many=True,
+            ).data,
             'errors': list(result.errors),
-        })
+        }, status=status.HTTP_200_OK if result.status in {'success', 'partial'} else status.HTTP_400_BAD_REQUEST)
 
 
 class MonitoringRecordViewSet(viewsets.ReadOnlyModelViewSet):
