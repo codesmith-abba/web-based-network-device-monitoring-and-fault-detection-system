@@ -20,16 +20,16 @@ def env_list(name: str, default: str = '') -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(',') if item.strip()]
 
 
-# Never ship a development secret. Tests receive an ephemeral key; every
-# non-test process must provide a real deployment secret through the environment.
 DEBUG = env_bool('DJANGO_DEBUG', False)
 _SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 if _SECRET_KEY:
     SECRET_KEY = _SECRET_KEY
-elif 'test' in sys.argv:
+elif DEBUG or 'test' in sys.argv:
+    # Explicit local debug/test processes may use an ephemeral key. Production
+    # processes must provide a stable secret through the environment.
     SECRET_KEY = get_random_secret_key()
 else:
-    raise RuntimeError('DJANGO_SECRET_KEY must be configured outside the test environment.')
+    raise RuntimeError('DJANGO_SECRET_KEY must be configured when DEBUG is disabled.')
 
 ALLOWED_HOSTS = env_list('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost')
 
