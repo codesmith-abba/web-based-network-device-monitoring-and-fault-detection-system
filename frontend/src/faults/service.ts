@@ -64,7 +64,7 @@ export function getFaultService(): FaultService {
     async list() { throw new FaultServiceError('Fault management is not connected yet. Configure the Django/DRF fault adapter when the backend contract is available.', 'FAULTS_NOT_CONFIGURED') },
     async get() { throw new FaultServiceError('Fault management is not connected yet.', 'FAULTS_NOT_CONFIGURED') },
     async acknowledge() { throw new FaultServiceError('Fault acknowledgement is not supported until the backend contract is available.', 'FAULT_ACTION_UNSUPPORTED') },
-    async updateStatus(..._args: Parameters<FaultService['updateStatus']>) { throw new FaultServiceError('Fault status updates are not supported until the backend contract is available.', 'FAULT_ACTION_UNSUPPORTED') },
+    async updateStatus() { throw new FaultServiceError('Fault status updates are not supported until the backend contract is available.', 'FAULT_ACTION_UNSUPPORTED') },
     async resolve() { throw new FaultServiceError('Fault resolution is not supported until the backend contract is available.', 'FAULT_ACTION_UNSUPPORTED') },
   }
 }
