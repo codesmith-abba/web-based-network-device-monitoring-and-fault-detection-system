@@ -2,25 +2,40 @@
 
 React + TypeScript frontend for the Web-Based Network Device Monitoring and Fault Detection System.
 
-## Phase 9B — Django REST API Integration
+## Phase 10 — Frontend Testing and Hardening
 
-The frontend is now connected to the actual Django REST contracts from Phase 9A.
+The frontend has been audited as the integration surface for the Django REST backend. Phase 10 focuses on correctness, predictable failure states, responsive behavior, accessibility, strict typing, and production validation without redesigning the existing feature set.
 
-### Connected APIs
+### Coverage audit
 
-- Authentication: `/api/auth/login/`, `/api/auth/me/`, `/api/auth/logout/`
-- Dashboard: `/api/dashboard/`
-- Devices: `/api/devices/`
-- Device monitoring controls: `/api/devices/:id/monitoring/`
-- Device monitoring snapshot: `/api/devices/:id/monitoring-snapshot/`
-- Faults: `/api/faults/`
-- Fault acknowledgement/resolution/status: `/api/faults/:id/...`
-- Monitoring history: `/api/monitoring-history/`
-- Fault history: `/api/fault-history/`
-- Notifications: `/api/notifications/`
-- Notification read state: `/api/notifications/:id/read/`
+| Area | Verified focus |
+| --- | --- |
+| Authentication | validation, loading, backend failures, protected navigation, session restoration, logout, safe redirect handling |
+| Dashboard | backend loading/error/empty data, responsive summary and fault presentation |
+| Devices | form validation, list/filter/sort/pagination, create/update/monitoring actions, API failures |
+| Device details | invalid/missing device state, monitoring loading/error/empty/partial data |
+| Monitoring | current vs historical separation, chart/table readability, empty/error states |
+| Faults | filtering, acknowledgement, resolution, status updates, API failures, accessible severity/status text |
+| History | monitoring/fault filters, empty/error/loading states, responsive tables and chart overflow |
+| Notifications | unread/read state, details, refresh, backend failures, header indicator |
+| Navigation | protected routes, login redirect, device-detail route matching, responsive shell |
 
-The shared API client is in `src/api/client.ts`. It sends the Django REST Framework token using the `Authorization: Token ...` header, parses API errors, and reports network failures consistently.
+### Hardening completed
+
+- Production service path remains the real Django REST API; no fabricated live data was introduced.
+- Shared API client centralizes token headers, JSON parsing, API errors, and network failures.
+- Authentication uses session storage for the DRF token and validates the session through `/api/auth/me/`.
+- Existing loading, empty, and error UI states remain part of the page-level contracts.
+- User input validation remains explicit on authentication and device management flows.
+- TypeScript application compilation now uses `strict: true` together with unused-code checks.
+- ESLint remains enabled with TypeScript and React Hooks rules.
+- No additional runtime dependency was added; the existing dependency set is intentionally small and is used by the application/toolchain.
+- Vite production builds remain the deployment validation target.
+- A GitHub Actions frontend validation workflow runs `npm ci`, `npm run lint`, and `npm run build` for frontend changes.
+
+### Accessibility baseline
+
+The existing UI uses semantic headings, labels, form associations, `aria-invalid`/`aria-describedby` validation feedback, live status messaging where appropriate, keyboard-operable buttons and dialogs, and text/symbol combinations for status information rather than color alone. Responsive tables and charts provide horizontal scrolling where dense data cannot safely collapse.
 
 ### API configuration
 
@@ -40,13 +55,9 @@ The existing mock authentication adapter remains available only for isolated UI 
 
 ### Backend-driven state
 
-Dashboard, devices, monitoring, faults, history, and notifications now use their real backend service boundaries. Frontend code does not recreate backend monitoring or fault business logic.
+Dashboard, devices, monitoring, faults, history, and notifications use their real backend service boundaries. Frontend code does not recreate backend monitoring or fault business logic.
 
-The UI still handles loading, empty, error, and unauthorized states. HTTP 401/403 responses are surfaced through the existing service boundaries so the application can require a fresh authentication session.
-
-The backend currently does not implement a live ICMP/SNMP monitoring worker, so the frontend does not claim live monitoring measurements beyond records actually returned by the API. SNMP capability states remain backend-driven.
-
-No email, SMS, browser push, or other external notification delivery is claimed.
+The backend currently does not implement a live ICMP/SNMP monitoring worker, so the frontend does not claim live monitoring measurements beyond records actually returned by the API. No email, SMS, browser push, or other external notification delivery is claimed.
 
 ## Earlier phases
 
@@ -81,6 +92,10 @@ Monitoring and fault history views with device/domain filters, date/time filters
 ### Phase 8 — Notification Experience
 
 Administrator notification list, header unread indicator, notification details, read/unread state, mark-as-read interaction, and responsive states.
+
+### Phase 9B — Django REST API Integration
+
+Shared API client, real authentication, dashboard/device/monitoring/fault/history/notification API services, DRF token handling, API error handling, and Vite development proxy.
 
 ## Architecture
 
@@ -117,7 +132,7 @@ npm install
 npm run dev
 ```
 
-Start the Django backend on its normal development port (`127.0.0.1:8000`) so the Vite `/api` proxy can reach it.
+Start the Django backend on `127.0.0.1:8000` so the Vite `/api` proxy can reach it.
 
 For isolated UI testing, the existing mock adapters can still be enabled explicitly; they are no longer the production service path.
 
@@ -128,15 +143,17 @@ npm run lint
 npm run build
 ```
 
-Phase 9B acceptance checks:
+The same commands run in GitHub Actions for frontend changes.
 
-1. Sign in through the Django API.
-2. Verify `/api/auth/me/` restores an authenticated session.
-3. Verify dashboard data comes from `/api/dashboard/`.
-4. Verify device list, create, edit, and monitoring state use Django endpoints.
-5. Verify device monitoring details use the monitoring snapshot endpoint.
-6. Verify fault list, acknowledgement, resolution, and status updates use Django endpoints.
-7. Verify monitoring and fault history use the real history endpoints.
-8. Verify notifications and mark-as-read use Django endpoints.
-9. Verify unauthorized and network failures are surfaced without fabricated data.
-10. Run `npm run lint` and `npm run build` before merging.
+### Integration smoke checklist
+
+1. Sign in with a valid Django administrator account.
+2. Verify invalid credentials and blank fields produce clear errors.
+3. Verify a protected route redirects unauthenticated users to login.
+4. Verify dashboard, devices, device details, faults, history, and notifications render backend responses.
+5. Verify empty API responses render empty states rather than fabricated records.
+6. Verify network/API failures render actionable error states.
+7. Verify device validation rejects invalid IP addresses and missing required fields.
+8. Verify fault acknowledgement/resolution and notification read actions update backend state.
+9. Verify the application remains usable at narrow/mobile widths.
+10. Run `npm run lint` and `npm run build` before deployment.
