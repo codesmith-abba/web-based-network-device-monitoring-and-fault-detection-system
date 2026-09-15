@@ -1,6 +1,11 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from .device_monitoring_api import (
+    DeviceMonitoringSnapshotView,
+    DeviceMonitoringSummaryView,
+    DeviceSNMPView,
+)
 from .views import (
     DashboardView,
     DeviceViewSet,
@@ -27,5 +32,20 @@ urlpatterns = [
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('monitoring-history/', MonitoringHistoryView.as_view(), name='monitoring-history'),
     path('fault-history/', FaultHistoryView.as_view(), name='fault-history'),
+    path(
+        'devices/<uuid:pk>/monitoring-snapshot/',
+        DeviceMonitoringSnapshotView.as_view(),
+        name='device-monitoring-snapshot-api',
+    ),
+    path(
+        'devices/<uuid:pk>/monitoring-summary/',
+        DeviceMonitoringSummaryView.as_view(),
+        name='device-monitoring-summary-api',
+    ),
+    path(
+        'devices/<uuid:pk>/snmp/',
+        DeviceSNMPView.as_view(),
+        name='device-snmp-api',
+    ),
     path('', include(router.urls)),
 ]
