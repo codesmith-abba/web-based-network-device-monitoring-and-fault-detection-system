@@ -10,6 +10,7 @@ from .alerts.services import mark_notification_read
 from .devices.services import ensure_monitoring_configuration
 from .faults.services import acknowledge_fault, resolve_fault
 from .models import Device, FaultEvent, MonitoringConfiguration, MonitoringRecord, Notification
+from .monitoring import InvalidMonitoringConfiguration, monitor_device
 from .serializers import (
     DeviceSerializer,
     FaultSerializer,
@@ -35,6 +36,16 @@ class DeviceViewSet(viewsets.ModelViewSet):
         device = serializer.save()
         ensure_monitoring_configuration(device)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='monitor')
+    def monitor(self, request, pk=None):
+        """Run one ICMP check and persist its monitoring result."""
+        device = self.get_object()
+        try:
+            record = monitor_device(device)
+        except InvalidMonitoringConfiguration as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(MonitoringRecordSerializer(record).data)
 
     @action(detail=True, methods=['get'], url_path='monitoring-snapshot')
     def monitoring_snapshot(self, request, pk=None):
