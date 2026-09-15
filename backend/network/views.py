@@ -55,6 +55,13 @@ class MonitoringRecordViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = MonitoringRecord.objects.select_related('device').all()
     serializer_class = MonitoringRecordSerializer
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        device_id = self.request.query_params.get('deviceId')
+        if device_id:
+            queryset = queryset.filter(device_id=device_id)
+        return queryset
+
 
 class FaultViewSet(viewsets.ModelViewSet):
     queryset = FaultEvent.objects.select_related('device').all()
