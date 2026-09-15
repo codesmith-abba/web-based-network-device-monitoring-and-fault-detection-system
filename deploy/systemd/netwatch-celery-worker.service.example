@@ -1,0 +1,17 @@
+[Unit]
+Description=NetWatch Celery Worker
+After=network.target redis-server.service
+Wants=redis-server.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/srv/netwatch/backend
+EnvironmentFile=/etc/netwatch/netwatch.env
+ExecStart=/srv/netwatch/venv/bin/celery -A backend worker --loglevel=INFO --concurrency=2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

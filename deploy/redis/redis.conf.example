@@ -1,0 +1,11 @@
+# NetWatch Redis deployment baseline.
+# Merge these directives into the distribution's redis.conf rather than
+# replacing the complete distro configuration.
+
+bind 127.0.0.1 ::1
+protected-mode yes
+port 6379
+supervised systemd
+
+# Redis is an internal Celery dependency in this deployment.
+# Do not expose port 6379 through the public firewall.
