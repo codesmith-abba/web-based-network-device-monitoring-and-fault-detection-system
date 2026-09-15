@@ -26,68 +26,88 @@ Implemented `/devices/:deviceId` with device identity, current status, monitorin
 
 ## Phase 6 — Fault Management
 
-Phase 6 adds the administrator fault-management experience at `/faults`.
+Implemented `/faults` with fault type, severity, affected device, detection time, status, details, acknowledgement, resolution, search, filters, sorting, loading/empty/error states, typed `FaultService`, and a deliberately unconfigured default backend adapter.
 
-Implemented:
+## Phase 7 — Historical Monitoring and Fault History
 
-- Fault event list with fault type, severity, affected device, detection time, and current status
-- Active/acknowledged versus resolved distinction
-- Severity presentation with text and symbols rather than color alone
-- Fault details dialog with description and resolution timestamp when supplied
-- Acknowledge workflow
-- Resolve workflow
-- Search by device, fault type, and description
+Implemented separate historical views:
+
+- `/monitoring-history` — historical monitoring measurements
+- `/fault-history` — historical fault events
+
+Historical monitoring provides:
+
+- Device filtering
+- Date/time range filtering
+- Timestamp
+- Device
+- Latency
+- Packet loss
+- Reachability
+- Responsive latency trend chart
+- Historical measurement table
+- Loading, empty, filtered-empty, and error states
+- Clear separation from current device status
+
+Historical fault visibility provides:
+
+- Device filtering
+- Date/time range filtering
+- Fault-type filtering
 - Severity filtering
 - Status filtering
-- Fault-type filtering
-- Device filtering
-- Detection-time sorting, newest first
-- Active/acknowledged and resolved summary counts
-- Loading, empty, filtered-empty, API-error, and action-error states
-- Typed `FaultEvent`, `FaultService`, status/severity/type contracts, and service errors
-- Explicit service boundary for future Django/DRF integration
-- Development-only fault scenarios: `populated`, `empty`, `partial`, `error`, and `loading`
-- Explicit development fixture banner so fault fixtures cannot be mistaken for automatically detected live faults
+- Device
+- Fault type
+- Severity
+- Detection time
+- Current status
+- Resolution timestamp when supplied
+- Loading, empty, filtered-empty, and error states
 
-### Fault data boundary
+### Historical data boundary
 
-`src/faults/types.ts` defines the frontend contract:
+Phase 7 introduces dedicated typed service boundaries in `src/history/`:
 
 ```text
-FaultService
-├── list()
-├── get(faultId)
-├── acknowledge(faultId)
-├── updateStatus(faultId, status)
-└── resolve(faultId)
+MonitoringHistoryService
+└── list()
+
+FaultHistoryService
+└── list()
 ```
 
-`src/faults/service.ts` contains the adapter boundary. The default service does not guess Django/DRF URLs, HTTP methods, payloads, authentication behavior, or backend response shapes. Status mutations are only available through the temporary mock adapter until the real backend contract is defined.
+The default services remain unconfigured until the Django/DRF historical API contracts exist. The mock historical monitoring view reuses the monitoring records already defined by the Phase 5 mock adapter; the fault history view reuses the existing Phase 6 fault fixtures. No new historical measurements or fault events are fabricated by Phase 7.
 
-### Fault state testing
+### Historical state testing
 
 From `frontend/`:
 
 ```bash
 VITE_AUTH_ADAPTER=mock \
 VITE_DEVICES_ADAPTER=mock \
+VITE_MONITORING_ADAPTER=mock \
 VITE_FAULTS_ADAPTER=mock \
 npm run dev
 ```
 
-Then open `/faults`.
+Open:
 
-Use these development scenarios:
-
-```bash
-VITE_FAULTS_SCENARIO=populated
-VITE_FAULTS_SCENARIO=empty
-VITE_FAULTS_SCENARIO=partial
-VITE_FAULTS_SCENARIO=error
-VITE_FAULTS_SCENARIO=loading
+```text
+/monitoring-history
+/fault-history
 ```
 
-The fixture adapter exists only to exercise the frontend states and interaction flows. Production fault events must come from the eventual fault-detection/backend service.
+Use the development history scenarios:
+
+```bash
+VITE_HISTORY_SCENARIO=populated
+VITE_HISTORY_SCENARIO=empty
+VITE_HISTORY_SCENARIO=partial
+VITE_HISTORY_SCENARIO=error
+VITE_HISTORY_SCENARIO=loading
+```
+
+The development banners explicitly identify reused fixture data. Production historical records must come from the eventual backend monitoring and fault-history services.
 
 ## Architecture
 
@@ -98,6 +118,7 @@ src/
 ├── dashboard/        # Dashboard data contracts and service boundary
 ├── devices/          # Device contracts and service boundary
 ├── faults/           # Fault contracts and service boundary
+├── history/          # Historical monitoring/fault contracts and service boundaries
 ├── monitoring/       # Device monitoring contracts and service boundary
 ├── layouts/          # Application-level layouts and shell
 ├── pages/            # Page-level views
@@ -126,31 +147,15 @@ Authentication testing:
 VITE_AUTH_ADAPTER=mock npm run dev
 ```
 
-Dashboard state testing:
+For Phase 7 historical views:
 
 ```bash
-VITE_DASHBOARD_ADAPTER=mock VITE_DASHBOARD_SCENARIO=populated npm run dev
+VITE_AUTH_ADAPTER=mock \
+VITE_DEVICES_ADAPTER=mock \
+VITE_MONITORING_ADAPTER=mock \
+VITE_FAULTS_ADAPTER=mock \
+npm run dev
 ```
-
-Device-management state testing:
-
-```bash
-VITE_DEVICES_ADAPTER=mock VITE_DEVICES_SCENARIO=populated npm run dev
-```
-
-Device-details testing:
-
-```bash
-VITE_AUTH_ADAPTER=mock VITE_DEVICES_ADAPTER=mock VITE_MONITORING_ADAPTER=mock npm run dev
-```
-
-Fault-management testing:
-
-```bash
-VITE_AUTH_ADAPTER=mock VITE_DEVICES_ADAPTER=mock VITE_FAULTS_ADAPTER=mock npm run dev
-```
-
-Then open `/faults`.
 
 ## Validation
 
@@ -161,18 +166,18 @@ npm run lint
 npm run build
 ```
 
-Phase 6 acceptance checks:
+Phase 7 acceptance checks:
 
-1. Authenticate with the development auth adapter and open `/faults`.
-2. Verify fault type, severity, affected device, detection time, and status are displayed.
-3. Verify active/acknowledged and resolved faults are clearly distinguishable.
-4. Open fault details and verify all supplied fault information is shown.
-5. Verify active faults can be acknowledged through the configured mock adapter.
-6. Verify unresolved faults can be resolved through the configured mock adapter.
-7. Verify severity, status, fault type, device, and text search filters.
-8. Verify newest detection time appears first.
-9. Verify loading, empty, filtered-empty, partial, and error states.
-10. Verify the default non-mock service reports not-configured/unsupported actions rather than making guessed API requests.
-11. Verify fixture events are visibly labelled as development data and are never presented as live detected faults.
-12. Resize across desktop, tablet, and mobile widths and verify the fault workflow remains usable.
+1. Authenticate with the development auth adapter.
+2. Open `/monitoring-history` and verify historical measurements are distinct from current device status.
+3. Filter monitoring history by device and date/time range.
+4. Verify latency and packet-loss values, timestamps, and reachability are displayed.
+5. Verify the latency chart remains readable on mobile through horizontal scrolling when required.
+6. Open `/fault-history` and verify device, fault type, severity, detection time, status, and supplied resolution information.
+7. Filter fault history by device, date/time, fault type, severity, and status.
+8. Verify loading, empty, filtered-empty, partial, and error states.
+9. Verify mock historical monitoring reuses existing monitoring records rather than creating fabricated history.
+10. Verify mock fault history reuses existing fault events rather than creating fabricated live faults.
+11. Verify the default non-mock services report not-configured errors rather than guessing backend endpoints.
+12. Resize across desktop, tablet, and mobile widths.
 13. Run `npm run lint` and `npm run build` before merging.
