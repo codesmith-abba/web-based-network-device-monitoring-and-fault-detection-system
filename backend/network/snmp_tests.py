@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APITestCase
 
@@ -101,7 +102,7 @@ class SNMPMonitoringTests(APITestCase):
 
         SNMPMetric.objects.create(
             device=self.device,
-            timestamp='2026-09-15T06:00:00Z',
+            timestamp=timezone.now(),
             metric='sysName',
             oid='1.3.6.1.2.1.1.5.0',
             value='edge-router',
