@@ -10,120 +10,84 @@ Responsive administrator shell, mobile navigation, application header, dashboard
 
 Administrator login at `/login`, validation, accessible errors, loading states, protected routes, session persistence/expiration, logout, and a typed `AuthService` boundary. The development-only mock adapter is enabled with `VITE_AUTH_ADAPTER=mock`; no backend authentication endpoint was invented.
 
-Authentication boundary:
-
-```text
-AuthCredentials → AuthService.login() → AuthSession
-```
-
 ## Phase 3 — Network Monitoring Dashboard
 
 Implemented the centralized network overview with Total Devices, Online, Offline, and Active Faults summary cards; device health; active faults; monitoring snapshot; reusable dashboard states/badges; responsive layouts; and typed monitoring contracts.
 
-The dashboard service does not invent a Django/DRF endpoint. Without `VITE_DASHBOARD_ADAPTER=mock`, it reports that monitoring is not configured. Mock scenarios are `populated`, `empty`, `partial`, `error`, and `loading`.
-
 ## Phase 4 — Network Device Management
 
-Phase 4 implements the administrator device-management workflow required to register and manage network devices.
-
-Implemented:
-
-- `/devices` protected application route
-- Device list/table with name, IP address, type, status, and monitoring state
-- Device registration form
-- Device editing form
-- Required-field validation
-- IPv4 validation
-- Device-type validation
-- Monitoring-configuration validation
-- Monitoring enable/disable control
-- Search by device name, IP address, or type
-- Status filtering
-- Monitoring-state filtering
-- Name, status, and type sorting
-- Pagination for the device list
-- Loading, empty, filtered-empty, and error states
-- Responsive registration/edit dialog and responsive device table
-- Accessible labels, validation messages, dialog semantics, and action labels
-- Device status labels using text/symbols rather than color alone
-- Explicitly no deletion action because the current backend contract does not define a device-delete endpoint
-
-### Device data boundary
-
-`src/devices/types.ts` defines the frontend contract:
-
-```text
-DeviceService
-├── list()
-├── create(DeviceRegistrationInput)
-├── update(id, DeviceRegistrationInput)
-└── setMonitoring(id, MonitoringState)
-```
-
-`src/devices/service.ts` contains the adapter boundary. The default service is deliberately unconfigured and does not guess Django/DRF URLs, HTTP methods, payloads, or response shapes. The temporary development adapter is enabled with:
-
-```bash
-VITE_DEVICES_ADAPTER=mock npm run dev
-```
-
-The mock adapter supports `VITE_DEVICES_SCENARIO=populated|empty|partial|error|loading` for UI-state testing. Mock device records are development data only and are not live monitoring results.
-
-When the Django/DRF device-management contract is available, replace the service implementation behind the existing typed interface. The page and forms should not need to know the eventual API transport or backend response shape.
+Implemented `/devices`, device registration/editing, validation, monitoring enable/disable, search/filter/sort/pagination, responsive states, and a typed `DeviceService`. Device deletion remains unavailable because the current backend contract does not define a delete operation.
 
 ## Phase 5 — Device Details and Monitoring
 
-Phase 5 adds the individual-device monitoring experience at `/devices/:deviceId`.
+Implemented `/devices/:deviceId` with device identity, current status, monitoring status, availability/reachability, latency, packet loss, latest result/timestamp, historical latency visualization, SNMP capability states, monitoring configuration, and loading/error/empty/partial states.
+
+`src/monitoring/service.ts` remains deliberately unconfigured unless `VITE_MONITORING_ADAPTER=mock` is enabled. Mock measurements are clearly labelled fixture data and are not live network measurements.
+
+## Phase 6 — Fault Management
+
+Phase 6 adds the administrator fault-management experience at `/faults`.
 
 Implemented:
 
-- Device identity, IP address, type, current status, and monitoring status
-- Latest availability/reachability result
-- Latest latency and packet-loss measurements
-- Latest monitoring timestamp
-- Typed monitoring records and monitoring-service boundary
-- Historical latency visualization only when historical measurements exist
-- Clear separation between current status and historical measurements
-- SNMP metric section with explicit unavailable states when the monitoring source does not provide SNMP data
-- Monitoring configuration visibility, including monitoring state, interval, SNMP state/version, and reported metric capabilities
-- Loading, unavailable-device, API-error, missing-metric, empty-history, and no-data states
-- Development-only mock monitoring scenarios: `populated`, `empty`, `partial`, `error`, and `loading`
-- Explicit mock-data banner so fixture measurements cannot be mistaken for live network measurements
+- Fault event list with fault type, severity, affected device, detection time, and current status
+- Active/acknowledged versus resolved distinction
+- Severity presentation with text and symbols rather than color alone
+- Fault details dialog with description and resolution timestamp when supplied
+- Acknowledge workflow
+- Resolve workflow
+- Search by device, fault type, and description
+- Severity filtering
+- Status filtering
+- Fault-type filtering
+- Device filtering
+- Detection-time sorting, newest first
+- Active/acknowledged and resolved summary counts
+- Loading, empty, filtered-empty, API-error, and action-error states
+- Typed `FaultEvent`, `FaultService`, status/severity/type contracts, and service errors
+- Explicit service boundary for future Django/DRF integration
+- Development-only fault scenarios: `populated`, `empty`, `partial`, `error`, and `loading`
+- Explicit development fixture banner so fault fixtures cannot be mistaken for automatically detected live faults
 
-### Monitoring data boundary
+### Fault data boundary
 
-`src/monitoring/types.ts` defines the frontend monitoring contract:
+`src/faults/types.ts` defines the frontend contract:
 
 ```text
-DeviceMonitoringService
-└── getSnapshot(deviceId)
-    ├── latest MonitoringRecord
-    ├── history MonitoringRecord[]
-    ├── snmpMetrics SnmpMetric[]
-    └── configuration MonitoringConfiguration
+FaultService
+├── list()
+├── get(faultId)
+├── acknowledge(faultId)
+├── updateStatus(faultId, status)
+└── resolve(faultId)
 ```
 
-`src/monitoring/service.ts` is deliberately unconfigured unless `VITE_MONITORING_ADAPTER=mock` is enabled. It does not assume Django/DRF monitoring URLs, HTTP methods, polling APIs, SNMP response shapes, or live measurements.
+`src/faults/service.ts` contains the adapter boundary. The default service does not guess Django/DRF URLs, HTTP methods, payloads, authentication behavior, or backend response shapes. Status mutations are only available through the temporary mock adapter until the real backend contract is defined.
 
-The mock monitoring adapter contains clearly labelled fixture records for UI testing only. Production monitoring values must come from the eventual backend monitoring service.
+### Fault state testing
 
-Example local testing:
+From `frontend/`:
 
 ```bash
 VITE_AUTH_ADAPTER=mock \
 VITE_DEVICES_ADAPTER=mock \
-VITE_MONITORING_ADAPTER=mock \
+VITE_FAULTS_ADAPTER=mock \
 npm run dev
 ```
 
-Monitoring state testing:
+Then open `/faults`.
+
+Use these development scenarios:
 
 ```bash
-VITE_MONITORING_SCENARIO=populated
-VITE_MONITORING_SCENARIO=empty
-VITE_MONITORING_SCENARIO=partial
-VITE_MONITORING_SCENARIO=error
-VITE_MONITORING_SCENARIO=loading
+VITE_FAULTS_SCENARIO=populated
+VITE_FAULTS_SCENARIO=empty
+VITE_FAULTS_SCENARIO=partial
+VITE_FAULTS_SCENARIO=error
+VITE_FAULTS_SCENARIO=loading
 ```
+
+The fixture adapter exists only to exercise the frontend states and interaction flows. Production fault events must come from the eventual fault-detection/backend service.
 
 ## Architecture
 
@@ -133,6 +97,7 @@ src/
 ├── components/       # Shared UI primitives, states, badges, and icons
 ├── dashboard/        # Dashboard data contracts and service boundary
 ├── devices/          # Device contracts and service boundary
+├── faults/           # Fault contracts and service boundary
 ├── monitoring/       # Device monitoring contracts and service boundary
 ├── layouts/          # Application-level layouts and shell
 ├── pages/            # Page-level views
@@ -179,7 +144,13 @@ Device-details testing:
 VITE_AUTH_ADAPTER=mock VITE_DEVICES_ADAPTER=mock VITE_MONITORING_ADAPTER=mock npm run dev
 ```
 
-Then open `/devices/rtr-01` or another device ID present in the development device adapter.
+Fault-management testing:
+
+```bash
+VITE_AUTH_ADAPTER=mock VITE_DEVICES_ADAPTER=mock VITE_FAULTS_ADAPTER=mock npm run dev
+```
+
+Then open `/faults`.
 
 ## Validation
 
@@ -190,18 +161,18 @@ npm run lint
 npm run build
 ```
 
-Phase 5 acceptance checks:
+Phase 6 acceptance checks:
 
-1. Authenticate with the development auth adapter and open a device details URL such as `/devices/rtr-01`.
-2. Verify device identity, IP address, type, current status, and monitoring state.
-3. Verify availability/reachability, latency, packet loss, latest result, and timestamp render from the typed monitoring contract.
-4. Verify current status and historical measurements are presented as separate concepts.
-5. Verify historical latency visualization appears only when historical data exists.
-6. Verify SNMP metrics remain explicitly unavailable when the monitoring source does not provide them.
-7. Verify monitoring configuration visibility.
-8. Test `empty`, `partial`, `error`, and `loading` monitoring scenarios.
-9. Verify an unknown device produces a clear unavailable-device error.
-10. Verify the default, non-mock monitoring adapter reports not-configured instead of making a guessed API request.
-11. Verify fixture measurements are visibly labelled as development data and are never presented as live network measurements.
-12. Resize across desktop, tablet, and mobile widths and verify the details experience remains usable.
+1. Authenticate with the development auth adapter and open `/faults`.
+2. Verify fault type, severity, affected device, detection time, and status are displayed.
+3. Verify active/acknowledged and resolved faults are clearly distinguishable.
+4. Open fault details and verify all supplied fault information is shown.
+5. Verify active faults can be acknowledged through the configured mock adapter.
+6. Verify unresolved faults can be resolved through the configured mock adapter.
+7. Verify severity, status, fault type, device, and text search filters.
+8. Verify newest detection time appears first.
+9. Verify loading, empty, filtered-empty, partial, and error states.
+10. Verify the default non-mock service reports not-configured/unsupported actions rather than making guessed API requests.
+11. Verify fixture events are visibly labelled as development data and are never presented as live detected faults.
+12. Resize across desktop, tablet, and mobile widths and verify the fault workflow remains usable.
 13. Run `npm run lint` and `npm run build` before merging.
