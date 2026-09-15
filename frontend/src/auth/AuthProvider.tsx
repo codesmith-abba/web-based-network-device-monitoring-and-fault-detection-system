@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { AUTH_EXPIRED_EVENT } from '../api/client'
 import { AuthContext } from './auth-context'
 import { getAuthService } from './service'
 import type { AuthCredentials, AuthSession } from './types'
@@ -24,6 +25,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false
     }
+  }, [])
+
+  useEffect(() => {
+    const handleAuthExpired = () => setSession(null)
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired)
   }, [])
 
   useEffect(() => {
