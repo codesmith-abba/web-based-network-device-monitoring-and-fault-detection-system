@@ -8,6 +8,7 @@ from .services import (
     monitor_device,
     ping_ipv4,
     record_measurement,
+    subprocess,
 )
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "monitor_device",
     "ping_ipv4",
     "record_measurement",
+    "subprocess",
 ]
