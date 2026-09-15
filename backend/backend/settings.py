@@ -1,7 +1,10 @@
 """Django settings for the network monitoring backend."""
 
 import os
+import sys
 from pathlib import Path
+
+from django.core.management.utils import get_random_secret_key
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -17,11 +20,17 @@ def env_list(name: str, default: str = '') -> list[str]:
     return [item.strip() for item in os.getenv(name, default).split(',') if item.strip()]
 
 
-# A real DJANGO_SECRET_KEY is required for deployed environments. The fallback
-# keeps local tests and development self-contained; deployment configuration
-# must override it.
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-development-only-change-me')
+# Never ship a development secret. Tests receive an ephemeral key; every
+# non-test process must provide a real deployment secret through the environment.
 DEBUG = env_bool('DJANGO_DEBUG', False)
+_SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
+if _SECRET_KEY:
+    SECRET_KEY = _SECRET_KEY
+elif 'test' in sys.argv:
+    SECRET_KEY = get_random_secret_key()
+else:
+    raise RuntimeError('DJANGO_SECRET_KEY must be configured outside the test environment.')
+
 ALLOWED_HOSTS = env_list('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost')
 
 INSTALLED_APPS = [
@@ -102,6 +111,12 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAdminUser',
     ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'login': '5/min',
+    },
 }
 
 # Security headers/cookies are configurable for HTTPS deployments. They stay
