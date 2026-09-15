@@ -2,24 +2,6 @@
 
 A web-based network monitoring platform for continuously monitoring network devices, detecting faults, tracking network health, and providing administrators with real-time visibility into infrastructure status.
 
-## Overview
-
-The **Web-Based Network Device Monitoring and Fault Detection System** is a network management application designed to help administrators monitor the health and availability of network devices from a centralized web interface.
-
-The system periodically collects network and device information, analyzes monitoring results, detects predefined fault conditions, records fault events, and presents network health information through an interactive dashboard.
-
-It is designed to reduce the difficulty of manually checking network devices and to provide faster identification of network failures and performance problems.
-
-## Key Features
-
-* **Device Management**
-* **Real-Time Monitoring**
-* **Fault Detection**
-* **Fault Management**
-* **Web Dashboard**
-* **Notifications**
-* **Historical Analytics**
-
 ## System Architecture
 
 ```text
@@ -29,20 +11,110 @@ Web Dashboard (React / TypeScript)
               │
 Django + Django REST Framework
               │
-     Network monitoring domain
-      ┌───────┼────────┐
-   Devices  Monitoring Faults
-                         │
-                   Notifications
+      Application/API boundary
+              │
+   ┌──────────┼───────────┐
+ Devices   Monitoring   Faults
+                          │
+                    Alerts/Notifications
+              │
+       Domain service modules
+              │
+ SQLite (development database)
+              │
+ Celery ───── Redis (background processing foundation)
 ```
 
-## Phase 9A — Django REST Backend Contracts
+The backend uses one Django `network` application with explicit domain modules. This preserves the working Phase 9 API contract and persistence models while separating business operations from HTTP handling.
 
-Phase 9A establishes the first real backend contract. The backend is no longer only a Django project skeleton: it now contains a `network` Django application, DRF authentication, domain models, serializers, authenticated API views, URL routing, migrations, notification generation, and API tests.
+```text
+backend/
+├── backend/
+│   ├── settings.py          # environment, DRF, CORS, SQLite, Celery
+│   ├── urls.py              # project-level HTTP routing
+│   └── celery.py            # Celery application
+└── network/
+    ├── api/                 # API boundary and health endpoint
+    ├── devices/             # device-domain services
+    ├── monitoring/          # monitoring-domain services
+    ├── faults/              # fault-domain services
+    ├── alerts/              # notification-domain services
+    ├── migrations/
+    ├── models.py            # current shared persistence models
+    ├── serializers.py       # REST representation boundary
+    ├── views.py             # REST controllers/viewsets
+    ├── urls.py
+    ├── signals.py
+    └── tests.py
+```
+
+This is an incremental architecture. A future phase can split domains into independent Django apps if the implementation grows enough to justify that change.
+
+## Phase 11 — Django Backend Foundation
+
+Phase 11 establishes the backend foundation required by the documented three-tier architecture.
+
+### REST API
+
+Django REST Framework is configured with token authentication and authenticated-by-default API permissions. The existing Phase 9 endpoints remain the canonical frontend contract.
+
+### Health Check
+
+```text
+GET /api/health/
+```
+
+A successful response confirms both application availability and SQLite connectivity:
+
+```json
+{
+  "status": "ok",
+  "database": "ok"
+}
+```
+
+### CORS
+
+Development CORS origins default to:
+
+```text
+http://localhost:5173
+http://127.0.0.1:5173
+```
+
+They can be overridden with `CORS_ALLOWED_ORIGINS`.
+
+### Environment Configuration
+
+Backend configuration is environment-driven. `backend/.env.example` documents the supported variables. Provide a real `DJANGO_SECRET_KEY` outside development and keep local secret files uncommitted.
+
+Important settings include:
+
+* `DJANGO_SECRET_KEY`
+* `DJANGO_DEBUG`
+* `DJANGO_ALLOWED_HOSTS`
+* `DJANGO_TIME_ZONE`
+* `SQLITE_DB_PATH`
+* `CORS_ALLOWED_ORIGINS`
+* `CSRF_TRUSTED_ORIGINS`
+* `CELERY_BROKER_URL`
+* `CELERY_RESULT_BACKEND`
+
+### SQLite
+
+SQLite remains the documented development database. The default database is `backend/db.sqlite3`; `SQLITE_DB_PATH` can override the location without changing application code.
+
+PostgreSQL remains a future production database option.
+
+### Celery and Redis
+
+Celery and Redis are established as the background-processing foundation. The Celery application is configured through Django settings and uses Redis as its default broker/backend.
+
+This phase does **not** claim that live ICMP/SNMP monitoring workers are already running. Actual periodic monitoring, network probing, fault detection, and retry scheduling belong to the monitoring-worker implementation phase.
+
+## Existing API Contract
 
 ### Authentication
-
-Token authentication is used for the current REST contract.
 
 ```text
 POST /api/auth/login/
@@ -50,22 +122,9 @@ POST /api/auth/logout/
 GET  /api/auth/me/
 ```
 
-Login accepts:
+Protected requests use `Authorization: Token <token>`.
 
-```json
-{
-  "username": "admin",
-  "password": "..."
-}
-```
-
-A successful login returns a token and basic user information. Protected API requests use:
-
-```text
-Authorization: Token <token>
-```
-
-### Device API
+### Devices
 
 ```text
 GET    /api/devices/
@@ -77,37 +136,16 @@ PATCH  /api/devices/<id>/monitoring/
 GET    /api/devices/<id>/monitoring-snapshot/
 ```
 
-Device responses use the frontend contract naming (`ipAddress`, `monitoring`, `createdAt`, `updatedAt`) while Django model fields remain Pythonic.
-
-### Dashboard API
-
-```text
-GET /api/dashboard/
-```
-
-Returns:
-
-* device summary counts
-* device health information
-* active faults
-
-### Monitoring API
+### Monitoring
 
 ```text
 GET /api/monitoring-records/
 GET /api/monitoring-records/<id>/
 GET /api/devices/<id>/monitoring-snapshot/
-```
-
-Historical monitoring is available through:
-
-```text
 GET /api/monitoring-history/
 ```
 
-Supported query parameters include `deviceId`, `from`, and `to`.
-
-### Fault API
+### Faults
 
 ```text
 GET    /api/faults/
@@ -118,15 +156,10 @@ PUT    /api/faults/<id>/
 POST   /api/faults/<id>/acknowledge/
 POST   /api/faults/<id>/resolve/
 PATCH  /api/faults/<id>/status/
+GET    /api/fault-history/
 ```
 
-Fault history is available through:
-
-```text
-GET /api/fault-history/
-```
-
-### Notification API
+### Notifications
 
 ```text
 GET  /api/notifications/
@@ -134,34 +167,7 @@ GET  /api/notifications/<id>/
 POST /api/notifications/<id>/read/
 ```
 
-Creating a fault automatically creates its notification record. Phase 9A does not claim email, SMS, or browser push delivery; those remain future integrations.
-
-## Fault Detection Logic
-
-The monitoring engine evaluates collected measurements against configurable thresholds and fault-detection rules.
-
-Example:
-
-```text
-Device does not respond
-        │
-        ▼
-Retry monitoring probe
-        │
-        ▼
-Repeated failure?
-     /       \
-   No         Yes
-   │           │
-   ▼           ▼
-Continue    Device DOWN
-monitoring      │
-                ▼
-          Create fault event
-                │
-                ▼
-          Create notification
-```
+Creating a fault automatically creates its notification record. Email, SMS, and browser push delivery are not implemented yet.
 
 ## Technology Stack
 
@@ -170,8 +176,8 @@ monitoring      │
 * Python
 * Django
 * Django REST Framework
-* Celery (planned monitoring worker integration)
-* Redis (planned monitoring worker integration)
+* Celery
+* Redis
 
 ### Network Monitoring
 
@@ -188,8 +194,8 @@ monitoring      │
 
 ### Database
 
-* SQLite for the current development backend foundation
-* PostgreSQL remains the planned production database
+* SQLite for development
+* PostgreSQL planned for production
 
 ### Infrastructure
 
@@ -197,24 +203,6 @@ monitoring      │
 * Nginx
 * Gunicorn / ASGI
 * Git & GitHub
-
-## Backend Structure
-
-```text
-backend/
-├── backend/
-│   ├── settings.py
-│   └── urls.py
-├── network/
-│   ├── migrations/
-│   ├── models.py
-│   ├── serializers.py
-│   ├── views.py
-│   ├── urls.py
-│   ├── signals.py
-│   └── tests.py
-└── requirements.txt
-```
 
 ## Monitoring Workflow
 
@@ -240,13 +228,21 @@ backend/
 * Phase 7 — Historical Monitoring and Fault History — completed
 * Phase 8 — Notification Experience — completed
 * Phase 9A — Django REST Backend Contracts — implemented
-* Phase 9B — Frontend API Integration — next
+* Phase 9B — Frontend API Integration — implemented
+* Phase 10 — Frontend Testing and Hardening — in progress
+* Phase 11 — Django Backend Foundation — implemented
 
-## Project Status
+## Validation
 
-**🚧 In Development**
+From `backend/`:
 
-This project is being developed as a practical network monitoring and fault-detection platform, with emphasis on reliability, modularity, observability, and maintainable software architecture.
+```bash
+python manage.py check
+python manage.py migrate
+python manage.py test
+```
+
+Phase 11 adds automated coverage for the public health endpoint while preserving the existing API contract tests.
 
 ## Academic Project
 
@@ -265,7 +261,3 @@ This system is developed as an academic project demonstrating the application of
 **Abdulmumin Abubakar**
 
 AI Engineer | Software Engineer | Founder, Echowavs
-
----
-
-⭐ If you find this project interesting, consider giving the repository a star.
