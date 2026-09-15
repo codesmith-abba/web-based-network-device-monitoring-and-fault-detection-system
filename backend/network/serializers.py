@@ -1,7 +1,7 @@
 from django.contrib.auth import authenticate, get_user_model
 from rest_framework import serializers
 
-from .models import Device, FaultEvent, MonitoringConfiguration, MonitoringRecord, Notification
+from .models import Device, FaultEvent, MonitoringConfiguration, MonitoringRecord, Notification, SNMPMetric
 
 
 User = get_user_model()
@@ -35,12 +35,28 @@ class MonitoringConfigurationSerializer(serializers.ModelSerializer):
     enabled = serializers.BooleanField(source='device.monitoring_enabled', read_only=True)
     intervalSeconds = serializers.IntegerField(source='interval_seconds', allow_null=True)
     snmpEnabled = serializers.BooleanField(source='snmp_enabled')
-    snmpVersion = serializers.CharField(source='snmp_version', allow_blank=True, allow_null=True)
-    availableMetrics = serializers.ListField(source='available_metrics', child=serializers.CharField())
+    snmpVersion = serializers.ChoiceField(
+        source='snmp_version',
+        choices=[('1', 'SNMPv1'), ('2c', 'SNMPv2c')],
+        allow_blank=True,
+        allow_null=True,
+        required=False,
+    )
+    snmpCommunity = serializers.CharField(source='snmp_community', write_only=True, allow_blank=True, required=False)
+    snmpPort = serializers.IntegerField(source='snmp_port', required=False, min_value=1, max_value=65535)
+    snmpTimeoutSeconds = serializers.FloatField(
+        source='snmp_timeout_seconds', required=False, min_value=0.1, max_value=30
+    )
+    availableMetrics = serializers.ListField(
+        source='available_metrics', child=serializers.CharField(), required=False
+    )
 
     class Meta:
         model = MonitoringConfiguration
-        fields = ['enabled', 'intervalSeconds', 'snmpEnabled', 'snmpVersion', 'availableMetrics']
+        fields = [
+            'enabled', 'intervalSeconds', 'snmpEnabled', 'snmpVersion', 'snmpCommunity',
+            'snmpPort', 'snmpTimeoutSeconds', 'availableMetrics',
+        ]
 
     def validate_intervalSeconds(self, value):
         if value is not None and value < 5:
@@ -64,6 +80,17 @@ class HistoricalMonitoringRecordSerializer(MonitoringRecordSerializer):
 
     class Meta(MonitoringRecordSerializer.Meta):
         fields = MonitoringRecordSerializer.Meta.fields + ['deviceName']
+
+
+class SNMPMetricSerializer(serializers.ModelSerializer):
+    deviceId = serializers.UUIDField(source='device_id', read_only=True)
+    metricName = serializers.CharField(source='metric', read_only=True)
+    valueType = serializers.CharField(source='value_type', read_only=True)
+
+    class Meta:
+        model = SNMPMetric
+        fields = ['id', 'deviceId', 'timestamp', 'metricName', 'oid', 'value', 'valueType']
+        read_only_fields = fields
 
 
 class FaultSerializer(serializers.ModelSerializer):
