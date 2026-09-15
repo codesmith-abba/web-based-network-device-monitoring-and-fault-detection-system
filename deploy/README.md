@@ -125,10 +125,12 @@ The frontend uses Vite and the production API path is same-origin:
 ```bash
 cd /srv/netwatch/frontend
 printf 'VITE_API_BASE_URL=/api\n' > .env.production
-npm ci
+npm install
 npm run lint
 npm run build
 ```
+
+The repository currently does not commit a frontend lockfile, so `npm install` is used rather than `npm ci`. Once a lockfile is intentionally committed, the deployment can switch to `npm ci` for deterministic installs.
 
 The resulting `frontend/dist/` directory is served directly by Nginx.
 
@@ -303,7 +305,7 @@ python manage.py check --deploy
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 cd ../frontend
-npm ci
+npm install
 npm run lint
 npm run build
 sudo systemctl restart netwatch-gunicorn
