@@ -55,9 +55,11 @@ class FaultSerializer(serializers.ModelSerializer):
     device = serializers.PrimaryKeyRelatedField(queryset=Device.objects.all(), write_only=True)
     deviceId = serializers.UUIDField(source='device_id', read_only=True)
     deviceName = serializers.CharField(source='device.name', read_only=True)
-    faultType = serializers.CharField(source='fault_type')
+    faultType = serializers.ChoiceField(source='fault_type', choices=FaultEvent.FaultType.choices)
     detectedAt = serializers.DateTimeField(source='detected_at')
-    resolvedAt = serializers.DateTimeField(source='resolved_at', allow_null=True)
+    resolvedAt = serializers.DateTimeField(source='resolved_at', allow_null=True, read_only=True)
+    severity = serializers.ChoiceField(choices=FaultEvent.Severity.choices)
+    status = serializers.ChoiceField(choices=FaultEvent.Status.choices)
 
     class Meta:
         model = FaultEvent
