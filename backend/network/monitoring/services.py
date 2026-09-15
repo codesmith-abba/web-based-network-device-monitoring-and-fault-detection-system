@@ -17,6 +17,7 @@ from ..models import Device, MonitoringConfiguration, MonitoringRecord
 
 DEFAULT_PING_TIMEOUT_SECONDS = 2.0
 _LATENCY_PATTERN = re.compile(r"time[=<]([0-9]+(?:[.,][0-9]+)?)\s*ms", re.IGNORECASE)
+_PACKET_LOSS_PATTERN = re.compile(r"(?:packet )?loss[^0-9]*([0-9]+(?:[.,][0-9]+)?)\s*%", re.IGNORECASE)
 
 
 class MonitoringError(Exception):
@@ -63,6 +64,13 @@ def _parse_latency(output: str) -> float | None:
     return float(match.group(1).replace(",", "."))
 
 
+def _parse_packet_loss(output: str) -> float | None:
+    match = _PACKET_LOSS_PATTERN.search(output)
+    if match is None:
+        return None
+    return float(match.group(1).replace(",", "."))
+
+
 def ping_ipv4(address: str, timeout_seconds: float = DEFAULT_PING_TIMEOUT_SECONDS) -> PingResult:
     """Execute one bounded ICMP echo request without invoking a shell."""
     _validate_ipv4(address)
@@ -90,13 +98,19 @@ def ping_ipv4(address: str, timeout_seconds: float = DEFAULT_PING_TIMEOUT_SECOND
 
     output = f"{completed.stdout}\n{completed.stderr}"
     latency = _parse_latency(output)
+    packet_loss = _parse_packet_loss(output)
 
     if completed.returncode == 0:
         if latency is None:
             latency = round((time.monotonic() - started) * 1000, 3)
-        return PingResult(True, latency, 0.0)
+        return PingResult(True, latency, packet_loss if packet_loss is not None else 0.0)
 
-    return PingResult(False, None, 100.0, "Device is unreachable or did not respond to ICMP.")
+    return PingResult(
+        False,
+        None,
+        packet_loss if packet_loss is not None else 100.0,
+        "Device is unreachable or did not respond to ICMP.",
+    )
 
 
 def _get_configuration(device: Device) -> MonitoringConfiguration:
@@ -114,8 +128,6 @@ def monitor_device(device: Device) -> MonitoringRecord:
 
     _get_configuration(device)
 
-    # Resolve through the package export so existing callers/tests can patch
-    # network.monitoring.ping_ipv4 without coupling themselves to this module.
     from . import ping_ipv4 as ping
 
     result = ping(str(device.ip_address))
