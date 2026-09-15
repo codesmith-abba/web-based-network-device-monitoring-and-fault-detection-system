@@ -1,4 +1,4 @@
-# Backend API — Device Management and ICMP Monitoring
+# Backend API — Device Management and Monitoring
 
 ## Authentication
 
@@ -91,7 +91,7 @@ The API validates the IPv4 address and device type on every write.
 DELETE /api/devices/<id>/
 ```
 
-Returns `204 No Content` on success. Device deletion cascades to its monitoring configuration, monitoring records, and fault records according to the persistence model. This behavior should therefore be treated as destructive.
+Returns `204 No Content` on success. Device deletion cascades to its monitoring configuration, monitoring records, SNMP metrics, and fault records according to the persistence model. This behavior should therefore be treated as destructive.
 
 ### Update monitoring state
 
@@ -109,6 +109,23 @@ Example:
 
 The monitoring configuration association is preserved when monitoring is disabled.
 
+## MonitoringRecord
+
+Each monitoring execution creates a new immutable historical `MonitoringRecord`. Existing records are never updated or replaced by later measurements.
+
+The record contains:
+
+| Field | Description |
+|---|---|
+| `id` | UUID identifier |
+| `deviceId` | Device associated with the measurement |
+| `timestamp` | Time the measurement was recorded |
+| `reachable` | Whether the device responded to ICMP |
+| `latencyMs` | Measured response latency, when available |
+| `packetLossPercent` | Packet-loss result, when available |
+
+The database indexes records by device/time, timestamp, and device/reachability/time to support latest-result, history, and status-oriented queries efficiently.
+
 ## ICMP monitoring
 
 The monitoring engine performs one bounded IPv4 ICMP echo request per monitoring execution. Ping execution is isolated from API views and uses `subprocess.run` without a shell. Timeouts, missing system ping utilities, and network errors are converted into an unreachable monitoring result rather than being allowed to crash the web application.
@@ -119,7 +136,7 @@ The monitoring engine performs one bounded IPv4 ICMP echo request per monitoring
 POST /api/devices/<id>/monitor/
 ```
 
-The endpoint executes one ICMP check, stores a `MonitoringRecord`, updates the device status to `online` or `offline`, and returns the stored result.
+The endpoint executes one ICMP check, stores a new `MonitoringRecord`, updates the device status to `online` or `offline`, and returns the stored result.
 
 Successful response example:
 
@@ -134,9 +151,11 @@ Successful response example:
 }
 ```
 
-For a timeout or unreachable device, the result is persisted with `reachable: false`, `latencyMs: null`, and `packetLossPercent: 100.0`. The endpoint still returns `200 OK` because the monitoring operation itself completed successfully and the device's unreachable state is the monitoring result.
+For an unreachable device, the result is persisted with `reachable: false`, no latency, and packet loss of `100.0` when the failed ICMP operation provides that measurement. Supported ping output is parsed for latency; packet loss is represented as the result of the ICMP execution.
 
 Invalid monitoring configuration, disabled monitoring, and unsupported addresses return `400 Bad Request` without creating a monitoring record.
+
+## Monitoring APIs
 
 ### List monitoring records
 
@@ -150,13 +169,42 @@ Filter by device:
 GET /api/monitoring-records/?deviceId=<device-uuid>
 ```
 
+The endpoint returns records in newest-first order. Historical records remain available after subsequent monitoring executions.
+
 ### Get device monitoring snapshot
 
 ```http
 GET /api/devices/<id>/monitoring-snapshot/
 ```
 
-Returns the device, latest monitoring record, recent history, SNMP metrics placeholder, and associated monitoring configuration.
+Returns the device, latest monitoring record, recent historical records, SNMP metrics, and associated monitoring configuration.
+
+### Get device monitoring summary
+
+```http
+GET /api/devices/<id>/monitoring-summary/
+```
+
+Returns aggregated monitoring health without changing historical data:
+
+```json
+{
+  "deviceId": "<device-uuid>",
+  "deviceName": "Core Router",
+  "status": "online",
+  "monitoringEnabled": true,
+  "totalRecords": 120,
+  "reachableRecords": 116,
+  "unreachableRecords": 4,
+  "availabilityPercent": 96.67,
+  "averageLatencyMs": 12.45,
+  "averagePacketLossPercent": 3.33,
+  "lastCheckedAt": "2026-09-15T06:30:00Z",
+  "latest": {}
+}
+```
+
+If no monitoring records exist, aggregate values that cannot be calculated are returned as `null`.
 
 ### Monitoring history
 
@@ -166,15 +214,17 @@ GET /api/monitoring-history/?deviceId=<device-uuid>
 GET /api/monitoring-history/?from=<iso-datetime>&to=<iso-datetime>
 ```
 
+The history endpoint supports device and time-range filtering and returns up to 500 records per request.
+
 ## ICMP engine behavior
 
 - IPv4 addresses are validated before ping execution.
-- One ICMP request is sent per monitoring execution.
+- One bounded ICMP request is sent per monitoring execution.
 - The default ping timeout is 2 seconds.
 - No shell is invoked for the ping command.
 - Successful responses record reachability and parsed latency in milliseconds.
-- Timeouts and network failures record the device as unreachable.
-- The device status is synchronized with the latest result.
+- Failed requests record unreachable status and packet loss when the execution can determine it.
+- The device status is synchronized with the latest monitoring result.
 - Monitoring configuration requires an interval of at least 5 seconds.
 - Monitoring failures do not propagate as unhandled exceptions from the API.
 
@@ -186,4 +236,4 @@ IPv6 addresses are rejected because the documented device model currently uses I
 
 ## Migration
 
-Phase 13 uses migration `0003_rename_type_device_device_type.py` after the existing `0002_rename_network_fau_device__f6c5a5_idx_network_fau_device__b8227f_idx_and_more.py`, avoiding a migration graph conflict while preserving existing device data. The API continues exposing `type` to preserve the existing frontend contract.
+Phase 16 adds migration `0006_monitoringrecord_indexes.py`, which strengthens indexes for monitoring-record retrieval and aggregation without modifying or deleting existing monitoring data.
