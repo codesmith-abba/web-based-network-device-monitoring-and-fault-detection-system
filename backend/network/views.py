@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 from .alerts.services import create_fault_notification, mark_notification_read
 from .faults.services import acknowledge_fault, resolve_fault
 from .models import Device, FaultEvent, MonitoringRecord, Notification
+from .monitoring import InvalidMonitoringConfiguration, monitor_device
 from .serializers import (
     DeviceSerializer,
     FaultSerializer,
@@ -87,6 +88,21 @@ class DeviceViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(name__icontains=search)
         return queryset
 
+    @action(detail=True, methods=['get', 'patch'], url_path='monitoring')
+    def monitoring(self, request, pk=None):
+        """Read or update only the device monitoring enabled state."""
+        device = self.get_object()
+        if request.method == 'PATCH':
+            serializer = DeviceSerializer(
+                device,
+                data={'monitoring': request.data.get('monitoring')},
+                partial=True,
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            device.refresh_from_db()
+        return Response(DeviceSerializer(device).data)
+
     @action(detail=True, methods=['get', 'patch'], url_path='monitoring-config')
     def monitoring_config(self, request, pk=None):
         device = self.get_object()
@@ -97,15 +113,46 @@ class DeviceViewSet(viewsets.ModelViewSet):
             serializer.save()
         return Response(MonitoringConfigurationSerializer(config).data)
 
+    @action(detail=True, methods=['post'], url_path='monitor')
+    def monitor(self, request, pk=None):
+        """Run one immediate ICMP monitoring check and persist the result."""
+        device = self.get_object()
+        try:
+            record = monitor_device(device)
+        except InvalidMonitoringConfiguration as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(MonitoringRecordSerializer(record).data, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=['get'], url_path='monitoring-snapshot')
     def monitoring_snapshot(self, request, pk=None):
         device = self.get_object()
+        configuration = device.monitoring_configuration
         latest = device.monitoring_records.first()
-        snmp_metrics = device.snmp_metrics.order_by('-timestamp')[:20]
+        history = device.monitoring_records.all()[:50]
+        snmp_metrics = device.snmp_metrics.order_by('-timestamp')
+
+        latest_by_metric = {}
+        for metric in snmp_metrics:
+            if metric.metric not in latest_by_metric:
+                latest_by_metric[metric.metric] = metric
+
+        configured_metrics = configuration.available_metrics or []
+        metric_names = list(dict.fromkeys([*configured_metrics, *latest_by_metric.keys()]))
+        snapshot_metrics = []
+        for metric_name in metric_names:
+            metric = latest_by_metric.get(metric_name)
+            snapshot_metrics.append({
+                'name': metric_name,
+                'value': metric.value if metric else None,
+                'available': metric is not None,
+            })
+
         return Response({
             'device': DeviceSerializer(device).data,
             'latest': MonitoringRecordSerializer(latest).data if latest else None,
-            'snmpMetrics': SNMPMetricSerializer(snmp_metrics, many=True).data,
+            'history': MonitoringRecordSerializer(history, many=True).data,
+            'snmpMetrics': snapshot_metrics,
+            'configuration': MonitoringConfigurationSerializer(configuration).data,
         })
 
     @action(detail=True, methods=['get'], url_path='monitoring-summary')
