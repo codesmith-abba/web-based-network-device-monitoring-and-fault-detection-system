@@ -151,10 +151,42 @@ class MonitoringRecordViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset
 
 
-class FaultViewSet(viewsets.ModelViewSet):
+class FaultViewSet(viewsets.ReadOnlyModelViewSet):
+    """Expose generated faults and controlled lifecycle actions to the frontend."""
+
     queryset = FaultEvent.objects.select_related('device').all()
     serializer_class = FaultSerializer
-    http_method_names = ['get', 'post', 'patch', 'put', 'head', 'options']
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        filters = {
+            'deviceId': 'device_id',
+            'severity': 'severity',
+            'type': 'fault_type',
+            'faultType': 'fault_type',
+            'status': 'status',
+        }
+        for query_key, field in filters.items():
+            value = self.request.query_params.get(query_key)
+            if value:
+                queryset = queryset.filter(**{field: value})
+
+        start = self.request.query_params.get('from')
+        end = self.request.query_params.get('to')
+        if start:
+            queryset = queryset.filter(detected_at__gte=start)
+        if end:
+            queryset = queryset.filter(detected_at__lte=end)
+        return queryset
+
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        """Return active and acknowledged faults for the dashboard."""
+        queryset = self.get_queryset().filter(
+            status__in=[FaultEvent.Status.ACTIVE, FaultEvent.Status.ACKNOWLEDGED]
+        )
+        return Response(self.get_serializer(queryset[:500], many=True).data)
 
     @action(detail=True, methods=['post'])
     def acknowledge(self, request, pk=None):
@@ -175,13 +207,24 @@ class FaultViewSet(viewsets.ModelViewSet):
         fault = self.get_object()
         new_status = request.data.get('status')
         if new_status not in FaultEvent.Status.values:
-            return Response({'status': 'Invalid fault status.'}, status=status.HTTP_400_BAD_REQUEST)
-        fault.status = new_status
-        if new_status == FaultEvent.Status.RESOLVED and fault.resolved_at is None:
-            fault.resolved_at = timezone.now()
-        if new_status != FaultEvent.Status.RESOLVED:
-            fault.resolved_at = None
-        fault.save(update_fields=['status', 'resolved_at'])
+            return Response({'detail': 'Invalid fault status.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if new_status == FaultEvent.Status.ACKNOWLEDGED:
+            try:
+                fault = acknowledge_fault(fault)
+            except ValueError as exc:
+                return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        elif new_status == FaultEvent.Status.RESOLVED:
+            fault = resolve_fault(fault)
+        else:
+            if fault.status == FaultEvent.Status.RESOLVED:
+                return Response(
+                    {'detail': 'Resolved faults cannot be reactivated through the API.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            fault.status = FaultEvent.Status.ACTIVE
+            fault.save(update_fields=['status'])
+
         return Response(self.get_serializer(fault).data)
 
 
@@ -255,12 +298,14 @@ class MonitoringHistoryView(APIView):
 
 
 class FaultHistoryView(APIView):
+    permission_classes = [IsAdminUser]
+
     def get(self, request):
         queryset = FaultEvent.objects.select_related('device').all()
-        for key in ('deviceId', 'severity', 'status', 'faultType'):
+        for key in ('deviceId', 'severity', 'status', 'faultType', 'type'):
             value = request.query_params.get(key)
             if value:
-                field = {'deviceId': 'device_id', 'faultType': 'fault_type'}.get(key, key)
+                field = {'deviceId': 'device_id', 'faultType': 'fault_type', 'type': 'fault_type'}.get(key, key)
                 queryset = queryset.filter(**{field: value})
         start = request.query_params.get('from')
         end = request.query_params.get('to')
