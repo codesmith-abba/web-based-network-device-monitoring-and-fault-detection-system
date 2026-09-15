@@ -3,6 +3,7 @@ export type NavigationKey =
   | 'devices'
   | 'faults'
   | 'monitoring'
+  | 'fault-history'
   | 'notifications'
   | 'settings'
 
