@@ -58,15 +58,15 @@ class DeviceViewSet(viewsets.ModelViewSet):
         queryset = MonitoringRecord.objects.filter(device=device)
         aggregates = queryset.aggregate(
             total=Count('id'),
-            reachable=Count('id', filter=models.Q(reachable=True)),
-            unreachable=Count('id', filter=models.Q(reachable=False)),
+            reachable_records=Count('id', filter=models.Q(reachable=True)),
+            unreachable_records=Count('id', filter=models.Q(reachable=False)),
             average_latency=Avg('latency_ms'),
             average_packet_loss=Avg('packet_loss_percent'),
             last_checked=Max('timestamp'),
         )
         latest = queryset.first()
         total = aggregates['total'] or 0
-        reachable = aggregates['reachable'] or 0
+        reachable = aggregates['reachable_records'] or 0
         availability = round((reachable / total) * 100, 2) if total else None
 
         return Response({
@@ -76,7 +76,7 @@ class DeviceViewSet(viewsets.ModelViewSet):
             'monitoringEnabled': device.monitoring_enabled,
             'totalRecords': total,
             'reachableRecords': reachable,
-            'unreachableRecords': aggregates['unreachable'] or 0,
+            'unreachableRecords': aggregates['unreachable_records'] or 0,
             'availabilityPercent': availability,
             'averageLatencyMs': round(aggregates['average_latency'], 3) if aggregates['average_latency'] is not None else None,
             'averagePacketLossPercent': round(aggregates['average_packet_loss'], 3) if aggregates['average_packet_loss'] is not None else None,
