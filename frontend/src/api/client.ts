@@ -12,6 +12,7 @@ export class ApiError extends Error {
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '')
 const TOKEN_STORAGE_KEY = 'netwatch.auth.token'
+export const AUTH_EXPIRED_EVENT = 'netwatch:auth-expired'
 
 export function getStoredToken(): string | null {
   return sessionStorage.getItem(TOKEN_STORAGE_KEY)
@@ -57,6 +58,10 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 
   const details = await parseResponse(response)
   if (!response.ok) {
+    if (response.status === 401 && token) {
+      clearStoredToken()
+      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
+    }
     throw new ApiError(messageFromDetails(details, `The API request failed with status ${response.status}.`), response.status, details)
   }
 
