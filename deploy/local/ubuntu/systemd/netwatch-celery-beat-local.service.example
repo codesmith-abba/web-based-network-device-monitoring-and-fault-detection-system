@@ -1,0 +1,17 @@
+[Unit]
+Description=NetWatch Celery Beat (Local Presentation)
+After=network.target redis-server.service
+Wants=redis-server.service
+
+[Service]
+Type=simple
+User=codesmithabba
+Group=codesmithabba
+WorkingDirectory=/home/codesmithabba/Desktop/web-based-network-device-monitoring-and-fault-detection-system/backend
+EnvironmentFile=/etc/netwatch/netwatch.env
+ExecStart=/home/codesmithabba/Desktop/web-based-network-device-monitoring-and-fault-detection-system/backend/env/bin/celery -A backend beat --loglevel=INFO --schedule=/home/codesmithabba/Desktop/netwatch-celerybeat-schedule
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
