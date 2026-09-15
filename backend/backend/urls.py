@@ -1,8 +1,10 @@
 from django.contrib import admin
 from django.urls import include, path
 
+from network.api.views import health_check
+
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/health/', include('network.api.urls')),
+    path('api/health/', health_check, name='health-check'),
     path('api/', include('network.urls')),
 ]
